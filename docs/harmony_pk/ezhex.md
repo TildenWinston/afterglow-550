@@ -31,13 +31,14 @@ the install scripts, in [configuration.md](configuration.md).
 
 ## Payload
 
-The payload is not part of the container format. Its first bytes identify which layout it
-uses, and the two seen so far are unrelated:
+The payload is not part of the container format. Its first bytes identify the native
+layout independently of the container:
 
 | Magic | Layout |
 |---|---|
 | `PK\x03\x04` | A ZIP archive of a filesystem tree - Harmony 900/1000/1100 |
 | `GSPM` | An indexed configuration - Harmony One |
+| `AHCM` | An architecture-9 configuration - Harmony 550, read-only inspection |
 
 A container carrying a tree does not make two remotes compatible; it means only that both
 happen to use a ZIP.
@@ -56,6 +57,12 @@ remote's filesystem and the archive carries the metadata that extraction depends
 Round-tripping content alone therefore is not enough. Reading a configuration has to
 record this metadata alongside the files if writing one is ever to produce something the
 remote accepts.
+
+Every unpacked carrier keeps the original `.ezhex_header`, including one whose remote
+profile is not installed. That shared header is not evidence of a ZIP tree: only the ZIP
+carrier's own sidecars identify one. Repacking an unknown-profile tree asks the dynamically
+discovered carrier to identify it and preserves the header, refreshing only payload size
+and container checksum.
 
 The compressed bytes themselves are a fifth item, and the only one that depends on the
 machine rather than the archive. Deflate output is not specified by the format: zlib and

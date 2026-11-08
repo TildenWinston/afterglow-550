@@ -1,0 +1,32 @@
+{
+  "schema": "afterglow-remote/1",
+  "id": "harmony-550",
+  "model": "Harmony 550",
+  "identity": {
+    "arch": 9,
+    "skin": 41,
+    "software_type": 0,
+    "flash": "0xFF:0x12",
+    "board": "2.5.0"
+  },
+  "payload": "blob",
+  "backend": "harmony-ahcm",
+  "status": "read-only",
+  "capabilities": {},
+  "infrared": {
+    "native_protocols": [],
+    "notes": "Native inspection only; no qualified signal generation."
+  },
+  "vocabulary": {},
+  "properties": {},
+  "interface": {
+    "tabs": ["devices", "flash"],
+    "device_pages": ["identity", "commands"],
+    "activity_pages": ["identity", "roles"],
+    "settings": ["output_file"],
+    "timing": [],
+    "languages": [["Not decoded (read-only)", ""]]
+  },
+  "preferences": {},
+  "notes": "Identity and AHCM framing are supported by the 550 donor in harmonic-afterglow/afterglow#16. The minimal interface is for inspection, not a declaration of firmware features. Languages, vocabulary, preferences, model variants, firmware bounds and writable size are not established. Structural validation is not hardware acceptance; builds and writes remain blocked."
+}

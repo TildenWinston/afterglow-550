@@ -47,7 +47,12 @@ def _tree_without(tmp_path: Path, removed: Path) -> Path:
     target.mkdir(parents=True)
     for entry in PACKAGE.iterdir():
         if entry.name in DATA_DIRS:
-            (target / entry.name).symlink_to(entry, target_is_directory=True)
+            try:
+                (target / entry.name).symlink_to(entry, target_is_directory=True)
+            except OSError as exc:
+                if getattr(exc, "winerror", None) != 1314:
+                    raise
+                shutil.copytree(entry, target / entry.name)
         elif entry.name == "__pycache__":
             continue
         elif entry.is_dir():

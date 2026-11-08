@@ -278,7 +278,8 @@ def sniff(payload: bytes) -> bool:
 
 def claims(src_dir: str) -> bool:
     """An unpacked PK tree is the one carrying this type's rebuild sidecars."""
-    return any(os.path.isfile(os.path.join(src_dir, sidecar)) for sidecar in SIDECARS)
+    return any(os.path.isfile(os.path.join(src_dir, sidecar))
+               for sidecar in SIDECARS - {".ezhex_header"})
 
 
 def unpack(payload: bytes, out_dir: str) -> int:

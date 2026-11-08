@@ -49,6 +49,12 @@ An `experimental` profile can also build an artifact, but normal writing is refu
 wrong on a remote nobody has tested means bricking hardware that can no longer be
 recovered from a vendor server, so the default is no.
 
+Experimental qualification uses the separately authorized
+[controlled first-write process](../first-write.md), with recovery capture, artifact
+validation, explicit confirmation and separate readback. A successful build or readback
+comparison alone does not qualify a remote. The explicit file-flash recovery path remains
+separate from normal generated-config writes.
+
 **Only the Harmony 900 is verified.** The Harmony 1100 is `experimental`: its
 configurations import and build - every command rendered into recorded sequences
 ([ssir-sequences.md](ssir-sequences.md)), a Logitech configuration rebuilding to the same

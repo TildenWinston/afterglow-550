@@ -10,9 +10,8 @@ Conventions decay silently. This one already had: `payloads/__init__.py` did
 `afterglow.ezhex` importing at all, and `ezhex.rehash()` called `payloads.get("pk")`
 by name. Nothing failed, because nothing checked. The test below is what checks.
 
-It works by building a package tree with one component removed and importing everything
-that is left. Python files are copied; the shipped data directories are symlinked, so a
-full pass costs a few hundred kilobytes rather than a megabyte and a half.
+It works by copying a package tree with one component removed and importing everything
+that is left. Shipped data is copied too, so the gate needs no filesystem-link privileges.
 """
 from __future__ import annotations
 
@@ -27,7 +26,6 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 PACKAGE = ROOT / "src" / "afterglow"
-DATA_DIRS = ("library", "icons", "scaffolds")
 
 
 def backend_names():
@@ -41,14 +39,12 @@ def payload_names():
 
 
 def _tree_without(tmp_path: Path, removed: Path) -> Path:
-    """A copy of the package with ``removed`` absent, data directories symlinked."""
+    """A self-contained copy of the package with ``removed`` absent."""
     src = tmp_path / "src"
     target = src / "afterglow"
     target.mkdir(parents=True)
     for entry in PACKAGE.iterdir():
-        if entry.name in DATA_DIRS:
-            (target / entry.name).symlink_to(entry, target_is_directory=True)
-        elif entry.name == "__pycache__":
+        if entry.name == "__pycache__":
             continue
         elif entry.is_dir():
             shutil.copytree(entry, target / entry.name,
@@ -85,6 +81,33 @@ def _import_everything(src: Path) -> str:
                             env={"PYTHONPATH": str(src), "PATH": ""})
     assert result.returncode == 0, result.stderr
     return result.stdout.strip()
+
+
+def test_component_removal_preserves_shipped_data_without_filesystem_links(tmp_path, monkeypatch):
+    package = tmp_path / "original" / "afterglow"
+    removed = package / "backends" / "removed"
+    retained = package / "backends" / "retained"
+    for backend in (removed, retained):
+        backend.mkdir(parents=True)
+        (backend / "backend.py").write_text("VALUE = 1\n", encoding="utf-8")
+    for name in ("library", "icons", "scaffolds"):
+        asset = package / name / "asset.txt"
+        asset.parent.mkdir()
+        asset.write_text(name, encoding="utf-8")
+
+    def reject_links(*_args, **_kwargs):
+        raise PermissionError("package removal must not need filesystem-link privileges")
+
+    monkeypatch.setattr(Path, "symlink_to", reject_links)
+    monkeypatch.setattr(sys.modules[__name__], "PACKAGE", package)
+
+    copied = _tree_without(tmp_path / "pruned", removed) / "afterglow"
+
+    assert not (copied / "backends" / "removed").exists()
+    assert (copied / "backends" / "retained" / "backend.py").read_text() == "VALUE = 1\n"
+    for name in ("library", "icons", "scaffolds"):
+        (package / name / "asset.txt").unlink()
+        assert (copied / name / "asset.txt").read_text(encoding="utf-8") == name
 
 
 @pytest.mark.parametrize("name", backend_names())

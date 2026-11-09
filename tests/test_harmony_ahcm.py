@@ -98,6 +98,32 @@ def test_rooted_reads_allow_shared_children_before_their_subsystem_table():
         image.read(image.checksum_offset - 1, 2)
 
 
+def test_an_explicit_linked_base_does_not_change_default_configuration_validation():
+    payload = bytearray(native_image())
+    base = 0x050000
+    payload[4:8] = (base + len(payload) - 4).to_bytes(4, "little")
+    slot = ahcm.TABLE_OFFSET + 4
+    payload[slot + 1:slot + 4] = (base + 0x80).to_bytes(3, "little")
+    payload[-6:-4] = ahcm.checksum(payload, len(payload) - 6)
+    linked = bytes(payload)
+
+    image = ahcm.Image(linked, logical_base=base)
+
+    assert image.section(1) == 0x80
+    assert image.offset(base + 0x80, 7) == 0x80
+    assert image.report()["logical_base"] == base
+    with pytest.raises(ahcm.InvalidImage):
+        ahcm.validate(linked)
+    with pytest.raises(ahcm.InvalidImage):
+        backend.validate_payload(linked, remotes.get("harmony-550"))
+
+
+@pytest.mark.parametrize("base", [-1, 0x1000000, True])
+def test_a_linked_base_must_be_an_explicit_native_address(base):
+    with pytest.raises(ahcm.InvalidImage, match="logical base"):
+        ahcm.Image(native_image(), logical_base=base)
+
+
 def test_an_unpaired_final_byte_is_not_part_of_the_native_checksum():
     payload = bytearray(native_image(0x301))
     checksum_offset = len(payload) - 6

@@ -78,10 +78,19 @@ still execute and consume expansion work.
 ## State and text
 
 The state table's words are total count, narrow count, wide count and narrow count again.
-Its records contain u16 initial value, u16 maximum, u16 transition count, an unknown byte
-and eight-byte transitions: lead, signed u16 from/to values, u16 operand and opcode.
-Unknown transition flags and sentinel behavior must not be replaced with invented
-portable state behavior.
+Its records contain u16 initial value, u16 maximum and a u24 transition count.
+The count's high byte is not an unrelated spare. The established fixed-size layouts
+(transition types 0, 1 and 2, selected by the lead byte's low seven bits) contain
+eight bytes: lead, signed u16 from/to values, u16 operand and opcode. Flags remain
+raw evidence, not automatically portable behavior.
+
+Other transition types do not have an established fixed-size span in this reader.
+They are reported as inspection limitations rather than read with an assumed
+eight-byte stride that could turn following data into invented transitions.
+The complete native payload remains evidence, and one unreadable state does not
+discard its siblings. Transition-count work consumes the software object budget;
+it is not a native capacity claim. Complex transition execution and sentinel behavior
+must not be replaced with guessed portable state behavior.
 
 A font starts with height, first code and count. When the third byte is zero, the second
 byte is the count and the first code is 1. Each non-null u24 glyph pointer names a width

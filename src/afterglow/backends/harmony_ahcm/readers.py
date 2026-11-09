@@ -233,21 +233,32 @@ class Reader:
         if not 0 <= ordinal < len(addresses):
             raise InvalidImage(f"state {ordinal} is outside its declared index")
         root = self.image.offset(addresses[ordinal], 7)
-        count = self.image.u16(root + 4)
-        self.image.read(root, 7 + 8 * count)
+        count = self.image.u24(root + 4)
         self._objects(count)
-        raw = self.capture("state", root, 7 + 8 * count)
-        transitions = [
-            {"lead": raw[at],
-             "from": int.from_bytes(raw[at + 1:at + 3], "little", signed=True),
-             "to": int.from_bytes(raw[at + 3:at + 5], "little", signed=True),
-             "operand": int.from_bytes(raw[at + 5:at + 7], "little"),
-             "opcode": raw[at + 7]}
-            for at in range(7, len(raw), 8)]
+        header = self.capture("state-header", root, 7)
+        transitions = []
+        cursor = root + 7
+        for _ in range(count):
+            lead = self.image.u8(cursor)
+            kind = lead & 0x7F
+            if kind not in (0, 1, 2):
+                self.capture("state-known-prefix", root, cursor - root + 1)
+                raise UnsupportedNative(
+                    f"state transition type {kind} has an unestablished record span")
+            raw = self.image.read(cursor, 8)
+            transitions.append({
+                "lead": lead,
+                "from": int.from_bytes(raw[1:3], "little", signed=True),
+                "to": int.from_bytes(raw[3:5], "little", signed=True),
+                "operand": int.from_bytes(raw[5:7], "little"),
+                "opcode": raw[7],
+            })
+            cursor += 8
+        self.capture("state", root, cursor - root)
         return {"ordinal": ordinal, "offset": root,
-                "first": int.from_bytes(raw[:2], "little"),
-                "maximum": int.from_bytes(raw[2:4], "little"),
-                "unknown": raw[6], "transitions": transitions}
+                "first": int.from_bytes(header[:2], "little"),
+                "maximum": int.from_bytes(header[2:4], "little"),
+                "transition_count": count, "transitions": transitions}
 
     def names(self) -> list[dict]:
         root = self.image.section(0)

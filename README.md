@@ -134,6 +134,11 @@ From source it uses the libconcord installed on the system. To use Afterglow's o
 instead (needed for direct access), point `AFTERGLOW_LIBCONCORD` at the library file, for
 example `AFTERGLOW_LIBCONCORD=~/concordance/libconcord/.libs/libconcord.so.6`.
 
+Use `--concord-check` with the source launcher to check library loading without
+connecting to a remote. On Windows, the loader initializes Python's matching SSL
+runtime before libconcord. An SSL-runtime initialization failure is a host-library
+error, not a remote identity or configuration error.
+
 ## Special Thanks
 
 - **[Concordance / libconcord](https://github.com/jaymzh/concordance)** — for reverse engineering the Harmony USB protocol and maintaining `libconcord`.

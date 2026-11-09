@@ -62,7 +62,8 @@ Every unpacked carrier keeps the original `.ezhex_header`, including one whose r
 profile is not installed. That shared header is not evidence of a ZIP tree: only the ZIP
 carrier's own sidecars identify one. Repacking an unknown-profile tree asks the dynamically
 discovered carrier to identify it and preserves the header, refreshing only payload size
-and container checksum.
+and container checksum when their values actually changed. An unchanged numeric value
+keeps its original decimal representation, including leading zeros.
 
 The compressed bytes themselves are a fifth item, and the only one that depends on the
 machine rather than the archive. Deflate output is not specified by the format: zlib and

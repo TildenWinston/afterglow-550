@@ -41,6 +41,7 @@ from __future__ import annotations
 import contextlib
 import ctypes
 import ctypes.util
+import importlib
 import logging
 import os
 import queue
@@ -342,6 +343,15 @@ LOAD_ERRORS: list[str] = []
 
 def _load():
     LOAD_ERRORS.clear()
+    if sys.platform == "win32":
+        # Windows reuses DLLs by filename. hashlib may have loaded Python's libcrypto;
+        # load its matching libssl too before libconcord brings another build's pair.
+        try:
+            importlib.import_module("ssl")
+        except (ImportError, OSError) as exc:
+            message = f"Python's SSL runtime could not be loaded before libconcord: {exc}"
+            LOAD_ERRORS.append(message)
+            raise NotAvailable(message) from exc
     # A particular build, such as Afterglow's own when running from source on a system
     # that also has upstream Concordance installed: by name the loader picks that one.
     chosen = os.environ.get("AFTERGLOW_LIBCONCORD")

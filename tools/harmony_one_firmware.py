@@ -49,7 +49,7 @@ BASES = {
 
 _LIT_OPS = {0x08: "SUBLW", 0x09: "IORLW", 0x0A: "XORLW", 0x0B: "ANDLW",
             0x0C: "RETLW", 0x0D: "MULLW", 0x0E: "MOVLW", 0x0F: "ADDLW"}
-_BYTE_OPS = {0x02: "MULWF", 0x04: "DECF", 0x10: "IORWF", 0x14: "ANDWF", 0x18: "XORWF",
+_BYTE_OPS = {0x04: "DECF", 0x10: "IORWF", 0x14: "ANDWF", 0x18: "XORWF",
              0x1C: "COMF", 0x20: "ADDWFC", 0x24: "ADDWF", 0x28: "INCF", 0x2C: "DECFSZ",
              0x30: "RRCF", 0x34: "RLCF", 0x38: "SWAPF", 0x3C: "INCFSZ", 0x40: "RRNCF",
              0x44: "RLNCF", 0x48: "INFSNZ", 0x4C: "DCFSNZ", 0x50: "MOVF", 0x54: "SUBFWB",
@@ -145,6 +145,8 @@ def disassemble(code: bytes, base: int, start: int, count: int):
             text = f"{_LIT_OPS[high]} {low:#04x}"
         elif high == 0x01:
             text = f"MOVLB {low & 0xF:#x}"
+        elif high & 0xFE == 0x02:
+            text = f"MULWF {low:#04x}, {high & 1}"
         elif high & 0xFC in _BYTE_OPS:
             text = (f"{_BYTE_OPS[high & 0xFC]} {low:#04x}, "
                     f"{'F' if high & 2 else 'W'}, {high & 1}")

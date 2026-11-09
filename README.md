@@ -40,9 +40,9 @@ Nothing is sent anywhere.
   - Harmony 800 - a prototype Logitech never sold
 
 **Harmony 550 is in development and has a read-only profile.** The current backend
-validates native framing and preserves carriers. It does not yet import devices and
-activities from a 550 configuration or generate 550 configurations, and no generated
-550 image has been qualified.
+validates native framing, preserves carriers and partially imports portable devices
+and signals. Unresolved controls and activity behavior remain native evidence with
+warnings. Project generation and qualified generated-image writes are not available.
 
 ## Before you start
 

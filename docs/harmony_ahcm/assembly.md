@@ -70,3 +70,19 @@ An authorized private capture passes the current identity and native-framing che
 Repeated identical reads establish capture consistency, not independent configurations
 or generated-image execution. No mandatory carried platform structure has yet been
 qualified, and the bundled-versus-synthesized platform decision remains unresolved.
+
+## IR duration-word primitive
+
+`ir_emit.duration_words` packs the signed microsecond intervals described in
+[reading.md](reading.md) without choosing command-record or transmitter defaults.
+Intervals exceeding the storage word's magnitude are split into consecutive words
+of the same polarity. The independent converter coalesces them back into the
+represented interval. No zero-duration words or truncated intervals are emitted.
+Explicit recording lead-in words are retained; they are not silently reassigned to
+a device delay or discarded.
+
+The encoder's configurable word budget bounds software allocation, not native
+validity or hardware capacity. It does not choose a symbol-size ceiling, allocate
+dictionary records, initialize toggles or qualify press/hold/release behavior.
+Those are separate construction and evidence gates. Word packing does not enable
+project generation or change the profile's read-only status.

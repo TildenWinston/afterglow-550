@@ -51,9 +51,12 @@ class Slot:
 class Image:
     """An immutable payload with independently bounded, rooted native reads."""
 
-    def __init__(self, payload: bytes):
+    def __init__(self, payload: bytes, *, logical_base: int = LOGICAL_BASE):
         if not isinstance(payload, bytes):
             raise TypeError("an AHCM image must be bytes")
+        _integer(logical_base, "logical base")
+        if not 0 <= logical_base <= 0xFFFFFF:
+            raise InvalidImage("logical base is outside the native u24 address domain")
         if len(payload) < HEADER_SIZE + 6:
             raise InvalidImage("truncated AHCM header or trailer")
         if payload[:4] != MAGIC:
@@ -61,7 +64,7 @@ class Image:
         if payload[HEADER_MARKER_OFFSET:HEADER_SIZE] != HEADER_MAGIC:
             raise InvalidImage("missing CMAH at the end of all twenty table slots")
         self.payload = payload
-        self.base = LOGICAL_BASE
+        self.base = logical_base
         self.end_vector = int.from_bytes(payload[4:8], "little")
         self.end_offset = self.end_vector - self.base
         self.checksum_offset = self.end_offset - 2

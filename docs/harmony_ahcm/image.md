@@ -40,6 +40,11 @@ to obtain a file offset. Concordance's architecture-9 physical transport configu
 address is `0x820000`, a different domain. A physical transport address is not a
 valid native pointer.
 
+An independently established linked image may be inspected with an explicit
+`Image(..., logical_base=...)`. This is a bounded address view, not automatic base
+inference or evidence that the image executes. Ordinary configuration validation and
+profile-selected import still require the configuration base above.
+
 Subsystem roots are not boundaries around contiguous sections. Follow owned pointers
 and counts even when children precede their root, roots are not sorted, or children
 are shared. Every followed span must remain within native data, after `CMAH` and

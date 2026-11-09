@@ -48,3 +48,4 @@ Reference documentation for supported remote architectures and configuration for
 
 - [README.md](harmony_ahcm/README.md) - Scope and read-only status
 - [image.md](harmony_ahcm/image.md) - Donor identity, twenty native slots, address domains and checksum
+- [assembly.md](harmony_ahcm/assembly.md) - Explicit allocations, rooted references and offline framing scope

@@ -38,16 +38,18 @@ def test_every_config_is_identified(configs):
 
 def test_a_remote_only_read_is_neither_written_nor_offered_for_building():
     """See docs/harmony_pk/remote-identities.md. A profile that has only been read is not
-    a build target and refuses a write; an experimental one is written like a verified
-    one, the interface backing the remote up first."""
+    a build target and refuses a write; only verified profiles permit normal writes."""
     for profile in remotes.load_all():
         if profile.status == remotes.READ_ONLY:
             with pytest.raises(remotes.NotWritable):
                 profile.require_writable()
             with pytest.raises(remotes.NotBuildable):
                 profile.require_buildable()
-        else:
+        if profile.verified:
             profile.require_writable()
+        else:
+            with pytest.raises(remotes.NotWritable):
+                profile.require_writable()
 
 
 def test_read_only_profile_refuses_to_build_or_write():
@@ -58,9 +60,16 @@ def test_read_only_profile_refuses_to_build_or_write():
         profile.require_writable()
 
 
-def test_experimental_profile_can_build_and_write():
+def test_experimental_profile_can_build_but_cannot_write_normally():
     profile = remotes.RemoteProfile(
         id="x", model="In controlled testing", status=remotes.EXPERIMENTAL)
+    profile.require_buildable()
+    with pytest.raises(remotes.NotWritable):
+        profile.require_writable()
+
+
+def test_verified_profile_can_build_and_write_normally():
+    profile = remotes.RemoteProfile(id="x", model="Verified", status=remotes.VERIFIED)
     profile.require_buildable()
     profile.require_writable()
 
@@ -100,7 +109,8 @@ def test_harmony_one_is_experimental_and_not_firmware_allowlisted():
 
     assert profile.status == remotes.EXPERIMENTAL
     profile.require_buildable()
-    profile.require_writable()
+    with pytest.raises(remotes.NotWritable):
+        profile.require_writable()
     assert profile.payload == "blob"
     assert profile.backend == "harmony-one"
     assert profile.firmware_min is None

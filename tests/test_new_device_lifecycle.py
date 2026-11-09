@@ -128,6 +128,25 @@ def test_flash_builds_the_project_on_screen_then_writes_it(qapp_or_skip, monkeyp
     assert "out_file" not in project["settings"], "the project itself is not changed"
 
 
+@pytest.mark.parametrize("remote_id", ["harmony-one", "harmony-1100", "harmony-800"])
+def test_an_experimental_flash_stops_before_building_or_contacting_usb(
+        qapp_or_skip, monkeypatch, remote_id):
+    from afterglow.gui import tabs
+
+    project = {"devices": [], "activities": [], "settings": {"remote": remote_id}}
+    tab = tabs.UpdateTab(project, SimpleNamespace())
+    warnings = []
+    monkeypatch.setattr(tabs.QMessageBox, "warning",
+                        lambda _parent, _title, text: warnings.append(text))
+    monkeypatch.setattr(tab, "_ready_to_build", lambda: pytest.fail("must not build"))
+    monkeypatch.setattr(tab, "_run", lambda *_a, **_kw: pytest.fail("must not contact USB"))
+    tab.flash()
+
+    assert len(warnings) == 1
+    assert "controlled first-write" in warnings[0]
+    assert "Nothing was written" in warnings[0]
+
+
 def test_flash_retirement_is_saved_when_the_project_has_a_path():
     from afterglow.gui.app import MainWindow
 

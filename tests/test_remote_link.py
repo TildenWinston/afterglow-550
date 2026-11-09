@@ -1086,7 +1086,7 @@ def _writing_remote(monkeypatch, saved, wrote, backup_bytes):
     return remote_ops
 
 
-def test_an_experimental_write_saves_the_remote_first(tmp_path, monkeypatch):
+def test_a_requested_backup_is_validated_before_any_write(tmp_path, monkeypatch):
     """The backup is taken on the same connection, before anything is written."""
     from afterglow import ezhex
     payload = b"PK-not-really-a-zip"

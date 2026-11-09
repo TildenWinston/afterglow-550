@@ -39,6 +39,11 @@ Nothing is sent anywhere.
   - Harmony One
   - Harmony 800 - a prototype Logitech never sold
 
+**Harmony 550 is in development and has a read-only profile.** The current backend
+validates native framing and preserves carriers. It does not yet import devices and
+activities from a 550 configuration or generate 550 configurations, and no generated
+550 image has been qualified.
+
 ## Before you start
 
 Nothing needs installing: no Python, no Logitech software, no driver.

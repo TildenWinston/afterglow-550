@@ -138,6 +138,7 @@ class Image:
         return {
             "ok": True,
             "validator": "harmony-ahcm/rooted-structural",
+            "validation_scope": "native-framing-and-root-addresses",
             "hardware_acceptance": "not-established",
             "logical_base": self.base,
             "end_vector": self.end_vector,
@@ -164,5 +165,8 @@ def validate(payload: bytes) -> dict:
 
 def inspect(payload: bytes) -> dict:
     """Inspect framing without normalising or discarding any native bytes."""
+    from .readers import Reader
+
     image = Image(payload)
-    return {**image.report(), "sha256": hashlib.sha256(payload).hexdigest()}
+    return {**image.report(), "sha256": hashlib.sha256(payload).hexdigest(),
+            "inventory": Reader(image).inspect()}

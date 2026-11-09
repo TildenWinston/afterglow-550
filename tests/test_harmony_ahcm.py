@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
+import os
 from pathlib import Path
 
 import pytest
@@ -176,9 +178,35 @@ def test_an_unknown_remote_header_roundtrips_through_dynamic_carrier_discovery(t
     assert payloads.identify_tree(str(tree)).NAME == "blob"
 
 
+def test_an_unchanged_carrier_keeps_the_original_numeric_header_representation(tmp_path):
+    payload = native_image()
+    profile = remotes.get("harmony-550")
+    header = ezhex.header_for_profile(profile, len(payload), ezhex.checksum(payload))
+    header = header.replace(b"<BINARYDATASIZE>", b"<BINARYDATASIZE>000")
+    header = header.replace(b"<CHECKSUM>", b"<CHECKSUM>000")
+    original, output = tmp_path / "original.ezhex", tmp_path / "repacked.ezhex"
+    original.write_bytes(header + payload)
+    tree = tmp_path / "tree"
+    with contextlib.redirect_stdout(io.StringIO()):
+        ezhex.unpack(str(original), str(tree))
+        ezhex.pack_standalone(str(tree), str(output), do_rehash=False)
+
+    assert output.read_bytes() == original.read_bytes()
+    assert "arch 9" in payloads.get(profile.payload).describe(payload)
+
+
 @pytest.fixture(scope="module")
 def private_550_configs():
-    found = sorted((ROOT / "configs" / "550").glob("*.ezhex"))
+    approved = os.environ.get("AFTERGLOW_550_CONFIG")
+    if approved:
+        path = Path(approved)
+        if not path.is_file():
+            pytest.fail("the explicitly provided private 550 fixture is unavailable")
+        return [path]
+    directory = ROOT / "configs" / "550"
+    found = sorted(path for path in directory.iterdir()
+                   if path.is_file() and path.suffix.casefold() == ".ezhex") \
+        if directory.is_dir() else []
     if not found:
         pytest.skip("no approved private Harmony 550 fixtures in configs/550")
     return found
@@ -195,3 +223,60 @@ def test_private_550_carriers_are_byte_identical_after_unpack_and_pack(
         contents = ezhex.read(original.read_bytes())
         assert remotes.identify(contents.header).id == "harmony-550"
         assert backend.validate_payload(contents.payload, remotes.get("harmony-550"))["ok"]
+
+
+def test_private_550_import_keeps_every_indexed_command_and_all_native_evidence(
+        private_550_configs, tmp_path):
+    import base64
+    from afterglow import importer, project_devices
+    from afterglow.backends.harmony_ahcm.readers import Reader
+
+    for index, original in enumerate(private_550_configs):
+        contents = ezhex.read(original.read_bytes())
+        reader = Reader(ahcm.Image(contents.payload))
+        expected = sum(len(reader.group(address)["commands"])
+                       for address in reader.addresses(5, 1))
+        tree = tmp_path / f"portable-{index}"
+        with contextlib.redirect_stdout(io.StringIO()):
+            ezhex.unpack(str(original), str(tree))
+        result = importer.import_result(str(tree))
+        assert sum(len(device["commands"]) for device in result.project["devices"]) == expected
+        for device in result.project["devices"]:
+            project_devices.validate(device)
+        assert base64.b64decode(result.preservation["payload_base64"]) == contents.payload
+        assert remotes.get("harmony-550").status == remotes.READ_ONLY
+
+
+def _assert_observed_fields(actual, expected):
+    if isinstance(expected, dict):
+        assert isinstance(actual, dict)
+        for key, value in expected.items():
+            assert key in actual, f"observed field {key!r} is missing"
+            _assert_observed_fields(actual[key], value)
+    elif isinstance(expected, list):
+        assert isinstance(actual, list)
+        assert len(actual) == len(expected), "observed population or sequence differs"
+        for value, observed in zip(actual, expected):
+            _assert_observed_fields(value, observed)
+    else:
+        assert actual == expected
+
+
+def test_private_550_import_matches_an_independent_owner_observed_inventory(
+        private_550_configs, tmp_path):
+    from afterglow import importer, project_devices
+
+    inventories = [path.with_suffix(".expected-project.json") for path in private_550_configs]
+    if any(not path.is_file() for path in inventories):
+        pytest.skip("independent owner-observed 550 behavioral inventories are unavailable")
+    for index, (original, inventory) in enumerate(zip(private_550_configs, inventories)):
+        expected = json.loads(inventory.read_text(encoding="utf-8"))
+        assert expected["source"] == "owner-observed"
+        assert {"devices", "activities"} <= expected["project"].keys()
+        tree = tmp_path / f"import-{index}"
+        with contextlib.redirect_stdout(io.StringIO()):
+            ezhex.unpack(str(original), str(tree))
+        result = importer.import_result(str(tree))
+        _assert_observed_fields(result.project, expected["project"])
+        for device in result.project["devices"]:
+            project_devices.validate(device)

@@ -305,10 +305,14 @@ def _header_for(src_dir, payload, profile=None):
             from . import remotes
             profile = remotes.default()
         header = header_for_profile(profile)
-    header = re.sub(rb"<BINARYDATASIZE>\d+</BINARYDATASIZE>",
-                    ("<BINARYDATASIZE>%d</BINARYDATASIZE>" % len(payload)).encode(), header)
-    return re.sub(rb"<CHECKSUM>\d+</CHECKSUM>",
-                  ("<CHECKSUM>%d</CHECKSUM>" % checksum(payload)).encode(), header)
+    for tag, value in ((b"BINARYDATASIZE", len(payload)), (b"CHECKSUM", checksum(payload))):
+        header = re.sub(
+            rb"(<" + tag + rb">)(\d+)(</" + tag + rb">)",
+            lambda match, value=value: (
+                match.group(0) if int(match.group(2)) == value else
+                match.group(1) + str(value).encode("ascii") + match.group(3)),
+            header)
+    return header
 
 
 def pack_standalone(src_dir, out_path, do_rehash=True, profile=None):

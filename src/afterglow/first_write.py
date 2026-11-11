@@ -71,7 +71,7 @@ def _artifact(path: Path, profile=None) -> tuple[dict, bytes]:
         native = validator(payload, profile)
     except (OSError, ValueError) as exc:
         raise FirstWriteError(f"{path.name} fails native validation: {exc}") from exc
-    return ({
+    info = {
         "path": str(path),
         "sha256": _digest(raw),
         "payload_sha256": _digest(payload),
@@ -82,7 +82,14 @@ def _artifact(path: Path, profile=None) -> tuple[dict, bytes]:
             "envelope": "size-and-checksum-valid",
             "native": native,
         },
-    }, payload)
+    }
+    extent = getattr(backend, "configuration_write_extent", None)
+    if callable(extent):
+        try:
+            info["write_extent"] = extent(payload, profile)
+        except (OSError, ValueError) as exc:
+            raise FirstWriteError(f"{path.name} fails configuration write extent: {exc}") from exc
+    return info, payload
 
 
 def _same_identity(expected: dict, actual: dict, fields=IDENTITY_FIELDS) -> list[str]:
@@ -183,6 +190,8 @@ def _revalidate_report(data: dict, profile) -> None:
         current, _payload = _artifact(Path(data[name]["path"]), profile)
         if current["sha256"] != data[name]["sha256"]:
             raise FirstWriteError(f"{name} changed after the report was prepared")
+        if current.get("write_extent") != data[name].get("write_extent"):
+            raise FirstWriteError(f"{name} configuration write extent changed after preparation")
     copy = Path(data["recovery_copy"]["path"])
     if _digest(copy.read_bytes()) != data["recovery_copy"]["sha256"]:
         raise FirstWriteError("the second recovery copy changed after preparation")
@@ -299,6 +308,8 @@ def restore(report, *, ask=input, remote_factory=concord.Remote) -> dict:
         raise FirstWriteError(
             "the recovery changed after it was captured; use the second copy at "
             f"{data['recovery_copy']['path']}")
+    if current.get("write_extent") != data["recovery"].get("write_extent"):
+        raise FirstWriteError("recovery configuration write extent changed after preparation")
     phrase = f"RESTORE {profile.id} {data['recovery']['sha256'][:12]}"
     if ask(f"Type {phrase!r} to restore: ").strip() != phrase:
         raise FirstWriteError("confirmation did not match; nothing was written")

@@ -9,6 +9,7 @@ interpretation belongs to the `harmony-ahcm` backend.
 - [ir-runtime.md](ir-runtime.md) describes bounded nominal IR consumption and its
   explicit physical-timing and scheduler limits.
 - [platform.md](platform.md) describes the bounded platform-event action handoff.
+- [preparation.md](preparation.md) describes offline changes and configuration erase extents.
 
 The profile remains **read-only**. Native structural validity proves neither firmware
 acceptance nor a safe write size. An imported configuration is evidence, never a template

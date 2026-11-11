@@ -52,3 +52,4 @@ Reference documentation for supported remote architectures and configuration for
 - [ir-runtime.md](harmony_ahcm/ir-runtime.md) - Bounded IR register, buffering and lifecycle references
 - [assembly.md](harmony_ahcm/assembly.md) - Explicit allocations, rooted references and offline framing scope
 - [platform.md](harmony_ahcm/platform.md) - Counted inline platform-event action handoff and remaining startup limits
+- [preparation.md](harmony_ahcm/preparation.md) - Offline byte/rooted change reports and candidate/recovery sector extents

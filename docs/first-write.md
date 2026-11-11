@@ -35,6 +35,14 @@ envelope and the backend-native payload, identifies the attached remote, reads i
 configuration, makes a second recovery copy, and records hashes plus a native change report.
 It refuses to overwrite any of those files.
 
+When a backend supplies `configuration_write_extent`, artifact validation also records
+the candidate and original recovery's separate intended payload-write and whole-sector
+erase footprints. Both are revalidated before apply, and the original's before restore;
+changed/missing extent evidence requires review rather than silently accepting a new
+footprint. [AHCM preparation reports](harmony_ahcm/preparation.md) distinguish byte/rooted
+changes from unsupported/unknown structure and do not claim runtime equivalence.
+These hooks do not change the read-only/experimental/verified gates.
+
 `apply` revalidates all three files and the connected identity, then requires the exact phrase
 stored in the reviewed report. Before calling the transport it durably changes the report state
 to `write-started`. If the process or USB connection fails, the state becomes
@@ -51,6 +59,11 @@ all artifacts for investigation; do not retry the candidate write.
 
 `readback-verified` proves the readback comparison only. It does not prove the remote
 booted or that its controls work.
+
+The existing transport effects require their own scope: USB initialization may send a
+connection-reset command, libconcord's configuration update synchronizes clock/state
+even with its reset disabled, and the Python wrapper requests a separate reboot by
+default. Offline validation does not remove these effects or authorize them.
 
 `restore` writes back only the recovery recorded in the report, after checking its digest and
 the attached remote's identity again, and requires its own phrase. Unlike `apply`, an

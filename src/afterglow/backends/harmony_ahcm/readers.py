@@ -415,7 +415,7 @@ class Reader:
     def evidence(self) -> list[dict]:
         return sorted(self.regions.values(), key=lambda region: (region["offset"], region["kind"]))
 
-    def inspect(self) -> dict:
+    def inspect(self, *, reject_invalid: bool = False) -> dict:
         counts, rejected = Counter(), Counter()
         errors = []
 
@@ -424,6 +424,8 @@ class Reader:
                 read()
                 counts[kind] += 1
             except (InvalidImage, UnsupportedNative) as exc:
+                if reject_invalid and isinstance(exc, InvalidImage):
+                    raise
                 rejected[str(exc)] += 1
                 errors.append({"kind": kind, "ordinal": ordinal, "reason": str(exc)})
 

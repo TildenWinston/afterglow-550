@@ -13,13 +13,21 @@ class UnsupportedOperation(NotImplementedError):
 
 
 def validate_payload(payload: bytes, profile=None) -> dict:
-    if profile is not None and profile.arch != 9:
-        raise ahcm.InvalidImage("AHCM inspection requires an architecture-9 profile")
-    report = ahcm.validate(payload)
-    identity = report["identity"]
-    if profile is not None and identity is not None and identity["skin"] != profile.skin:
-        raise ahcm.InvalidImage("native skin conflicts with the selected remote profile")
-    return report
+    from . import reporting
+
+    return reporting.validate_payload(payload, profile)
+
+
+def compare_payloads(recovery: bytes, candidate: bytes, profile) -> dict:
+    from . import reporting
+
+    return reporting.compare_payloads(recovery, candidate, profile)
+
+
+def configuration_write_extent(payload: bytes, profile) -> dict:
+    from . import reporting
+
+    return reporting.configuration_write_extent(payload, profile)
 
 
 def build_project(project, profile, context):

@@ -87,3 +87,68 @@ def test_unmodeled_glyph_operations_remain_explicit_instead_of_skipped():
 
     with pytest.raises(UnsupportedNative, match="unrecognised glyph operation"):
         reader.glyph(font, 7)
+
+
+def test_source_owned_fonts_and_text_are_built_from_explicit_inputs_not_an_imported_image():
+    planned = layout.Layout(header_value=0x030201, spares=tuple(range(20)))
+    for slot in range(20):
+        planned.root(slot, "fonts" if slot == 7 else None)
+    shapes = [[[1, 0, 1]], [[0, 1]]]
+    target = screens.add_font(planned, "authored-font", first_code=7, glyphs=shapes)
+    screens.add_font_index(planned, "fonts", [None, target])
+    program = screens.encode_text_program(
+        font_index=1, lines=[screens.TextLine(3, 2, b"\x07\x08"),
+                             screens.TextLine(8, 4, b"")])
+    planned.add("program", program, owner="synthetic-screen")
+    first = planned.assemble()
+    reader = Reader(ahcm.Image(first.payload))
+
+    assert first == planned.assemble()
+    assert reader.addresses(7, 2)[0] == 0
+    font = reader.font(1)
+    assert [reader.glyph(font, code) for code in (7, 8)] == shapes
+    assert reader.screen(first.offset("program")) == [
+        {"offset": first.offset("program"), "opcode": 16, "operands_hex": "01"},
+        {"offset": first.offset("program") + 2, "opcode": 5,
+         "x": 3, "y": 2, "codes_hex": "0708"},
+        {"offset": first.offset("program") + 8, "opcode": 5,
+         "x": 8, "y": 4, "codes_hex": ""},
+    ]
+
+
+def test_named_font_references_can_be_forward_declared_without_a_chosen_global_root():
+    planned = layout.Layout(header_value=0x010203, spares=tuple(range(20)))
+    screens.add_font_index(planned, "fonts", ["later"])
+    screens.add_font(planned, "later", first_code=1, glyphs=[[[1]]])
+    for slot in range(20):
+        planned.root(slot, "fonts" if slot == 7 else None)
+    reader = Reader(ahcm.Image(planned.assemble().payload))
+
+    assert reader.glyph(reader.font(0), 1) == [[1]]
+
+
+@pytest.mark.parametrize("first, glyphs", [
+    (0, [[[1]]]), (True, [[[1]]]), (256, [[[1]]]), (1, []),
+    (255, [[[1]], [[0]]]), (1, [[[1]], [[1], [1]]]),
+])
+def test_font_construction_refuses_ambiguous_or_inconsistent_explicit_repertoires(first, glyphs):
+    planned = layout.Layout(header_value=0, spares=[0] * 20)
+    with pytest.raises(ValueError):
+        screens.add_font(planned, "invalid", first_code=first, glyphs=glyphs)
+
+
+@pytest.mark.parametrize("codes", [b"\x00", b"\x80", b"\xff", b"\x01\x00\x02"])
+def test_text_codes_never_introduce_a_hidden_terminator_or_guessed_extended_mapping(codes):
+    with pytest.raises(UnsupportedNative, match="single-byte"):
+        screens.TextLine(0, 0, codes)
+
+
+def test_text_programs_require_explicit_valid_font_coordinates_and_typed_source_lines():
+    with pytest.raises(ValueError, match="font"):
+        screens.encode_text_program(font_index=True, lines=[])
+    with pytest.raises(ValueError, match="coordinate"):
+        screens.TextLine(-1, 0, b"\x01")
+    with pytest.raises(TypeError, match="immutable"):
+        screens.TextLine(0, 0, bytearray(b"\x01"))
+    with pytest.raises(TypeError, match="TextLine"):
+        screens.encode_text_program(font_index=0, lines=[(0, 0, b"\x01")])

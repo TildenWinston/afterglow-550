@@ -107,3 +107,41 @@ def test_a_platform_handoff_does_not_enable_building_or_writing_the_read_only_55
         profile.require_buildable()
     with pytest.raises(remotes.NotWritable):
         profile.require_writable()
+
+
+def test_key_changes_report_old_release_before_new_press_without_inventing_a_key_name():
+    changed = platform.key_transition(3, 5, emit_release=True)
+
+    assert changed == platform.KeyChange(5, (0x43, 0x85), True, True)
+    assert platform.key_transition(0, 5, emit_release=True) == (
+        platform.KeyChange(5, (0x85,), False, True))
+    assert platform.key_transition(5, 0, emit_release=True) == (
+        platform.KeyChange(0, (0x45,), True, False))
+
+
+def test_suppressed_release_events_still_clear_the_old_ir_held_source_on_change():
+    assert platform.key_transition(3, 5, emit_release=False) == (
+        platform.KeyChange(5, (0x85,), True, True))
+    assert platform.key_transition(5, 0, emit_release=False) == (
+        platform.KeyChange(0, (), True, False))
+
+
+def test_a_stable_scan_is_not_an_invented_repeat_or_a_request_to_clear_ir_hold():
+    assert platform.key_transition(5, 5, emit_release=True) == (
+        platform.KeyChange(5, (), False, False))
+    assert platform.key_transition(0, 0, emit_release=False) == (
+        platform.KeyChange(0, (), False, False))
+
+
+def test_raw_event_codes_are_not_masked_into_a_guessed_six_bit_key_map():
+    assert platform.key_transition(64, 0, emit_release=True).events == (64,)
+    assert platform.key_transition(0, 64, emit_release=False).events == (192,)
+
+
+@pytest.mark.parametrize("old, new, release", [
+    (-1, 0, True), (0, 256, True), (True, 1, False), (0, 0, 1),
+])
+def test_ingress_does_not_silently_truncate_invalid_codes_or_default_its_release_policy(
+        old, new, release):
+    with pytest.raises(ValueError):
+        platform.key_transition(old, new, emit_release=release)

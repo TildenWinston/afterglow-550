@@ -186,7 +186,7 @@ A true result means caller-supplied acceptance, **not** optical completion, phys
 timing, or correct hold/release behavior. Callback errors stop the instance rather
 than lose the instruction and permit a later success report.
 
-Unknown instructions, complex transitions, asynchronous key-event routing, silent
+Unknown instructions, complex transitions, unconfigured key-event routing, silent
 state-zero platform refresh, and state-cache storage aliasing stop explicitly.
 The host model handles only disjoint cache storage and consistent, byte-sized
 header counts; these are model limitations, not new native-validity or safe-size
@@ -199,3 +199,59 @@ power/input transitions and an explicit off-state action plan. That does not
 establish the platform Off button, Help questions/correction, display changes,
 peripheral lifecycle, or complete activity support. Generation capabilities and
 the profile's read-only status remain unchanged.
+
+## Mode/page construction and callbacks
+
+`modes` constructs explicit narrow or wide tagged lists, pages, modes and the slot-6
+index using named `Layout` references. An empty tagged list requires the wide form;
+nonzero flags cannot be stored in a narrow form. Mode kind, binding actions, page
+programs and index order come from the caller, not a captured configuration or a
+default platform. These are native record codecs, not an authorized project build.
+
+Optional runtime navigation requires an explicit `ModeState` and paint callback.
+`0x7E` selects a mode and page zero even when selecting the current mode again.
+It requests the old page's tag `0x2A` (with mode fallback), old mode tag 7, new mode
+tag 6, and new page tag `0x29` (with mode fallback), in that order. Kind bit 0
+suppresses this initial paint only; callback actions are still queued.
+
+`0x76` selects a page. An out-of-range request preserves the current page but still
+requests its exit/entry callbacks and paint. The canonical `0x0F` operands `0x00A0`
+and `0x00A1` step backward/forward with wrap. Page callbacks search the page before
+the mode. A wide binding with flags bit 0 set requests its action and falls through;
+an all-zero narrow match still terminates fallback. Duplicate matches in one list
+do not execute twice.
+
+The paint callback receives the selected mode/page and the **logical program
+address**; it is not given a guessed label or pixel result. Painting is requested
+during dispatch, before queued callback actions execute. Explicit page selection
+paints even when the kind bit suppressed the mode's initial paint. Pixel output,
+font state, geometry and peripheral effects belong to a separate rendering contract.
+Absent-mode selection, modes without page-zero targets and wrapping native index
+arithmetic remain explicit model limitations. No physical Off/Help/key mapping or
+startup sufficiency follows from these navigation paths.
+
+## Explicit raw key routing
+
+`modes.add_key_sets` allocates an explicitly ordered slot-9 index; the caller chooses
+its root. `Runtime` can consume a raw `0x1F`/`0xFCxx` event token only when supplied
+with `KeyState(stack, alternate, inhibited)`. This is not a physical key-name mapping
+or a debounce/repeat/held-lifetime model.
+
+The stack searches newest first. Entries `0xFC`, `0xFD` and `0xFE` select the alternate
+context, current mode/page and running context; other entries select a literal key
+set, with `0xFF` absent. Page bindings precede mode bindings, then search continues
+down the stack only on fallthrough. Flags and zero-action matches retain the same
+behavior as callback lookup. Inhibition suppresses lookup actions; no physical
+meaning such as USB connection state is assigned to that flag.
+
+Canonical `0x1F` operands with high byte `0xFE` push a stack entry, `0xFD` remove the
+first matching entry from the bottom, and `0xE8` set the alternate context. The
+model stops before unchecked stack growth aliases other runtime storage; this is
+not a native image-capacity or validity assertion.
+
+Mode/context changes and stack push/removal invalidate queued press/release tokens
+whose raw event byte has either high bit set. Their three-byte slots become no-ops,
+not reclaimed capacity: later work must not be accepted by pretending the native
+queue shrank. Raw events can now reach navigation and command requests through
+these explicit states. Off/Help identities, physical scan assignments, rendering
+readiness and IR completion still require their separate contracts.

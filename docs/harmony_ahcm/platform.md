@@ -73,3 +73,82 @@ storage bounds, not a display-size or safe-image-size claim.
 Unknown glyph operations remain errors, and no existing glyph artwork, startup
 program, screen or household configuration is copied by this primitive. It neither
 assembles a complete font/screen platform nor changes the read-only gates.
+
+## Caller-owned fonts and inline text programs
+
+`screens.add_font` allocates named caller-authored glyphs and an explicit font
+record using the [declared font grammar](reading.md). It requires a consistent
+height, nonzero first code and an explicit repertoire; glyph widths can differ.
+`add_font_index` allocates ordered named references, including explicit nulls and
+forward targets. Neither helper assigns root 7: the layout owner must declare
+that root, all other subsystem roots and the header inputs separately.
+
+`encode_text_program` takes an explicit LCD `display_page`, font ordinal and ordered
+`TextLine` values. It emits the measured display-page/font-selection and inline-text
+instructions and terminates each code string and program. The LCD page is not the
+mode's navigation-page ordinal, and neither is inferred from the other.
+Coordinates are explicit source fields, not validated
+physical LCD cells. The supported text subset uses nonzero single-byte glyph codes;
+embedded terminators and unestablished extended mapping are refused rather than
+truncated. Empty strings are explicit, not replacement glyphs.
+
+Conditional image-local host probes follow the actual root/font/index/cache/string/
+glyph path against synthetic inputs and RAM painting, with raw external-byte reads
+and transaction setup abstracted. They corroborate the generated font/index/program
+records without a captured configuration template. Probes start with deliberately
+incorrect display-page cache values; the emitted page selection establishes that
+cache before text drawing. Raw byte I/O and normal access addressing remain model
+inputs, not proof of peripheral or boot initialization.
+Unknown font ordinals/codes must not be used merely because
+the field can encode them.
+
+These are deterministic source-owned drawing records, not a complete startup,
+mode/page binding generator, Unicode font service or LCD driver. Caller input must
+establish matching font/code ownership and readiness. No native key codes, measured
+geometry, copied platform programs or mandatory subsystem defaults are supplied.
+
+## Raw scan-change handoff
+
+`platform.key_transition` takes explicit previous/current scan bytes and an explicit
+release-reporting flag. Zero is no active scan. An unchanged scan emits nothing;
+it is not automatically a repeat. On change, a nonzero previous scan emits its
+release event (`scan | 0x40`) only if release reporting is enabled, followed by a
+nonzero new scan's press event (`scan | 0x80`).
+
+Replacing or releasing a previously active scan requests clearing the IR-held latch,
+even when its release event is suppressed. A newly active scan requests restarting
+the repeat machinery, without choosing timer units or scheduling a callback.
+The active scan is an input to subsequent IR priming, not an instruction to set
+the IR-held latch immediately. Raw event bits are retained, not reduced to a
+guessed six-bit physical key namespace.
+
+Scoped private synthetic probes follow the native change/event/latch-clear path,
+abstracting physical scan, queue sink and repeat reset. This does not establish
+which physical button produces a scan byte, debounce timing, repeat scheduling,
+GPIO wiring or actual held/released optical behavior. No profile key map or
+write/build capability is inferred from this data-only contract.
+
+## Standalone construction boundary
+
+A synthetic composition can now allocate its own fonts, text programs, pages,
+bindings, mode index and event handoff from explicit inputs, then follow page
+navigation and named paint targets in the host model. Its paint consumer can read
+the constructed source glyphs without an imported configuration or carried artwork.
+Explicit initial cache/context/mode state remains a test input, not a startup
+implementation.
+
+Bounded private post-validation startup probes request event selector 1 for the
+ordinary entry and 4 for the alternate entry. Finite synthetic bootstrap-input
+checks corroborate both outcomes with device-memory access abstracted. When the
+user configuration is valid and selected, either outcome keeps that bank.
+A source-owned image may explicitly supply the same intended action in both
+entry records; it need not discover the current bootstrap input merely to make
+those two handoffs agree. This is not a default installed by the encoder or
+proof that the configuration validator/cache/peripherals are ready.
+
+The mandatory platform milestone is not complete. In particular, reset-to-application
+correspondence, configuration validity/selection inputs, cache/peripheral readiness
+and physical legend-to-scan mapping must be established independently. A logical
+display-transfer loop is not proof of panel wiring, clock, contrast or geometry.
+Suppressing an unmodeled requirement or choosing familiar control names would not
+make the constructed frame a qualified standalone candidate.

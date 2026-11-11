@@ -147,7 +147,7 @@ def test_an_unaccepted_boundary_keeps_the_same_request_pending_without_advancing
 
 
 @pytest.mark.parametrize("instruction,match", [
-    ((0x76, 1), "not modeled"),
+    ((0x75, 1), "not modeled"),
     ((0x1F, 0xFC01), "asynchronous"),
     ((7, 255), "state-zero"),
 ])

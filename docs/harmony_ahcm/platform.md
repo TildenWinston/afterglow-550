@@ -48,3 +48,28 @@ selector request does not prove that supplying that record is sufficient to boot
 
 The backend remains read-only. This primitive does not enable project generation,
 normal writes, firmware operations, status promotion or template-based construction.
+
+## Explicit monochrome glyph sources
+
+The [glyph reader](reading.md) retains clear, ink and transparent source values.
+Scoped synthetic image-local probes additionally corroborate the five-bit row/run
+counts, clear/ink/transparent effects and one-/two-bit literal packing against the
+captured renderer's RAM-painting path. The probes abstract raw byte input and
+transaction setup and model ordinary access addressing. They do not operate an LCD
+or establish physical geometry, clock/peripheral behavior or glyph-code identities.
+
+`screens.encode_literal_glyph` constructs only caller-authored two-bit source rows:
+zero clears, one sets ink, and two or three leave the destination unchanged.
+It preserves those source values exactly rather than flattening transparent pixels
+onto a guessed background. Width is explicit, and the caller must supply the
+matching height in its separately constructed font.
+
+The encoder emits only literals, not compression/backreference defaults. A row
+whose literal operations cannot fit the five-bit operation-byte length is reported
+as an unsupported encoding choice, not declared invalid for the remote: another
+compression form can represent a wider simple row. Width/height field checks are
+storage bounds, not a display-size or safe-image-size claim.
+
+Unknown glyph operations remain errors, and no existing glyph artwork, startup
+program, screen or household configuration is copied by this primitive. It neither
+assembles a complete font/screen platform nor changes the read-only gates.

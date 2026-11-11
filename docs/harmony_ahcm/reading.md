@@ -94,10 +94,16 @@ must not be replaced with guessed portable state behavior.
 
 A font starts with height, first code and count. When the third byte is zero, the second
 byte is the count and the first code is 1. Each non-null u24 glyph pointer names a width
-and exactly the font's height of counted rows, followed by zero. A row's `0x2n` leader
-counts operation bytes. Operations encode runs of paper (`0x6n`), ink (`0xAn`) or literal
-two-bit pixels (`0x5n`), with run length `n + 1`. Pixel counts must close at the glyph
-width. A glyph need not precede its font table.
+and exactly the font's height of counted rows, followed by zero. Pixel counts must
+close at the glyph width. A glyph need not precede its font table.
+
+Row leaders use the `0x20..0x3F` family: their low five bits count operation bytes,
+not pixels. Clear (`0x80..0x9F`), ink (`0xA0..0xBF`) and transparent skip
+(`0x60..0x7F`) runs use a five-bit pixel count plus one. Literal operations carry
+one-bit (`0x4n`) or two-bit (`0x5n`) MSB-first source pixels, with `n + 1` pixels.
+Zero clears, one sets ink, and either two-bit value with its high bit set leaves
+the destination unchanged. The reader retains both two-bit values without merging
+their original representation; unsupported operations remain explicit limitations.
 
 Glyph codes are identified by the actual decoded shape and an unambiguous reference
 fingerprint, not by ordinal or repertoire size. The bundled catalogue contains

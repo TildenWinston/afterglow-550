@@ -313,25 +313,31 @@ class Reader:
         for _row in range(font["height"]):
             leader = self.image.u8(cursor)
             cursor += 1
-            if leader >> 4 != 2:
+            if leader & 0xE0 != 0x20:
                 raise UnsupportedNative("unrecognised monochrome glyph row")
-            end = cursor + (leader & 15)
+            end = cursor + (leader & 31)
             self.image.read(cursor, end - cursor)
             pixels = []
             while cursor < end:
                 command = self.image.u8(cursor)
                 cursor += 1
-                kind, count = command >> 4, (command & 15) + 1
-                if kind == 5:
-                    size = (count * 2 + 7) // 8
+                kind = command >> 4
+                if kind in (4, 5):
+                    count = (command & 15) + 1
+                    bits = 1 if kind == 4 else 2
+                    per_byte, mask = 8 // bits, (1 << bits) - 1
+                    size = (count * bits + 7) // 8
                     if cursor + size > end:
                         raise InvalidImage("literal glyph pixels cross their row")
                     packed = self.image.read(cursor, size)
-                    pixels.extend((packed[index // 4] >> (6 - 2 * (index % 4))) & 3
+                    pixels.extend((packed[index // per_byte]
+                                   >> (8 - bits - bits * (index % per_byte))) & mask
                                   for index in range(count))
                     cursor += size
-                elif kind in (6, 10):
-                    pixels.extend([2 if kind == 6 else 1] * count)
+                elif command & 0xE0 in (0x60, 0x80, 0xA0):
+                    count = (command & 31) + 1
+                    value = {0x60: 2, 0x80: 0, 0xA0: 1}[command & 0xE0]
+                    pixels.extend([value] * count)
                 else:
                     raise UnsupportedNative(f"unrecognised glyph operation {kind}")
             if len(pixels) != width:

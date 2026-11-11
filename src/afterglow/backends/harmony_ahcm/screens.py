@@ -102,10 +102,12 @@ class TextLine:
                 "extended-code selection is not established")
 
 
-def encode_text_program(*, font_index: int, lines: Sequence[TextLine]) -> bytes:
-    """Encode an explicit font selection and inline text, with no background or page defaults."""
+def encode_text_program(*, display_page: int, font_index: int,
+                        lines: Sequence[TextLine]) -> bytes:
+    """Encode explicit LCD-page/font selection and text; LCD pages are not mode pages."""
+    _byte(display_page, "selected display page")
     _byte(font_index, "selected font index")
-    result = bytearray((16, font_index))
+    result = bytearray((22, display_page, 16, font_index))
     for line in lines:
         if not isinstance(line, TextLine):
             raise TypeError("text program lines must be TextLine values")

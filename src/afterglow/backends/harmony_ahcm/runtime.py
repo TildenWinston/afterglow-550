@@ -25,12 +25,34 @@ class Request:
 
 
 @dataclass(frozen=True)
+class ModeState:
+    mode: int | None
+    page: int | None
+
+    def __post_init__(self):
+        if (self.mode is None) != (self.page is None):
+            raise ValueError("mode and page must both be explicit or both absent")
+        if self.mode is not None and self.page is not None:
+            _integer(self.mode, 65535, "mode")
+            _integer(self.page, 65535, "page")
+
+
+@dataclass(frozen=True)
+class Paint:
+    mode: int
+    page: int
+    program: int
+
+
+@dataclass(frozen=True)
 class Execution:
     steps: int
     requests: tuple[Request, ...]
     pending: bool
     values: tuple[int, ...]
     context: int | None
+    mode_state: ModeState | None = None
+    paints: tuple[Paint, ...] = ()
 
 
 def _integer(value: int, maximum: int, label: str) -> None:
@@ -42,7 +64,8 @@ class Runtime:
     """Conditional queue/state interpreter, with no startup or automatic IR completion."""
 
     def __init__(self, reader: Reader, *, values: Sequence[int], context: int | None,
-                 accept: Callable[[Request], bool]):
+                 accept: Callable[[Request], bool], mode_state: ModeState | None = None,
+                 paint: Callable[[Paint], None] | None = None):
         root = reader.image.section(13)
         if root is None:
             raise UnsupportedNative("runtime requires an explicit state table")
@@ -69,6 +92,15 @@ class Runtime:
         self._silent = False
         self._queue: deque[tuple[int, int]] = deque()
         self._failed = False
+        if mode_state is not None and not isinstance(mode_state, ModeState):
+            raise TypeError("mode state must be supplied as a ModeState")
+        if mode_state is not None and not callable(paint):
+            raise TypeError("mode interpretation requires an explicit paint callback")
+        self.mode_state = mode_state
+        self._paint = paint
+        self._paints: list[Paint] = []
+        if mode_state is not None and mode_state.mode is not None and mode_state.page is not None:
+            self._mode(mode_state.mode, mode_state.page)
 
     @property
     def values(self) -> tuple[int, ...]:
@@ -112,6 +144,71 @@ class Runtime:
             pending += self._context_actions(context, 1)
         self.context = context
         self._prepend(pending)
+
+    def _mode(self, ordinal: int, page: int) -> dict:
+        if 3 + 3 * ordinal > 65535 or 6 + 3 * page > 65535:
+            raise UnsupportedNative("wrapped navigation index arithmetic is not modeled")
+        record = self.reader.mode(ordinal)
+        if not record["pages"]:
+            raise UnsupportedNative("mode without a page-zero target is not modeled")
+        if not 0 <= page < len(record["pages"]):
+            raise InvalidImage(f"page {page} is outside mode {ordinal}")
+        return record
+
+    @staticmethod
+    def _binding(entries: list[dict], tag: int) -> tuple[list[tuple[int, int]], bool]:
+        entry = next((entry for entry in entries if entry["tag"] == tag), None)
+        if entry is None:
+            return [], False
+        return [(entry["opcode"], entry["operand"])], not entry["flags"] & 1
+
+    def _page_actions(self, mode: dict, page: int, tag: int) -> list[tuple[int, int]]:
+        pending, stop = self._binding(mode["pages"][page]["bindings"], tag)
+        if not stop:
+            pending += self._binding(mode["bindings"], tag)[0]
+        return pending
+
+    def _paint_page(self, mode: dict, page: int) -> None:
+        if self._paint is None:
+            raise UnsupportedNative("painting requires an explicit renderer boundary")
+        request = Paint(mode["ordinal"], page,
+                        self.reader.image.base + mode["pages"][page]["program"])
+        self._paints.append(request)
+        self._paint(request)
+
+    def _select_mode(self, selected: int) -> None:
+        if self.mode_state is None:
+            raise UnsupportedNative("initial mode state and painting are not supplied")
+        if selected == 0xFEFE:
+            raise UnsupportedNative("selecting the absent-mode sentinel is not modeled")
+        mode = self._mode(selected, 0)
+        pending = []
+        if self.mode_state.mode is not None and self.mode_state.page is not None:
+            old = self._mode(self.mode_state.mode, self.mode_state.page)
+            pending += self._page_actions(old, self.mode_state.page, 0x2A)
+            pending += self._binding(old["bindings"], 7)[0]
+        self.mode_state = ModeState(selected, 0)
+        pending += self._binding(mode["bindings"], 6)[0]
+        pending += self._page_actions(mode, 0, 0x29)
+        self._prepend(pending)
+        if not mode["kind"] & 1:
+            self._paint_page(mode, 0)
+
+    def _select_page(self, selected: int | None, *, delta: int = 0) -> None:
+        if (self.mode_state is None or self.mode_state.mode is None
+                or self.mode_state.page is None):
+            raise UnsupportedNative("page selection requires explicit current mode state")
+        old_page = self.mode_state.page
+        mode = self._mode(self.mode_state.mode, old_page)
+        pending = self._page_actions(mode, old_page, 0x2A)
+        if selected is None:
+            selected = (old_page + delta) % len(mode["pages"])
+        page = selected if selected < len(mode["pages"]) else old_page
+        self._mode(self.mode_state.mode, page)
+        self.mode_state = ModeState(self.mode_state.mode, page)
+        pending += self._page_actions(mode, page, 0x29)
+        self._prepend(pending)
+        self._paint_page(mode, page)
 
     @staticmethod
     def _matches(condition: int, value: int, before: int, after: int) -> bool:
@@ -161,6 +258,7 @@ class Runtime:
         if self._failed:
             raise UnsupportedNative("runtime stopped previously; create a new explicit state")
         requests: list[Request] = []
+        self._paints = []
         steps = 0
         finished = False
         try:
@@ -194,6 +292,12 @@ class Runtime:
                     self._select_context(operand & 255)
                 elif opcode == 0x1F and operand >> 8 in (0xF1, 0xF2):
                     self._write(operand & 255, 0, delta=1 if operand >> 8 == 0xF2 else -1)
+                elif opcode == 0x7E:
+                    self._select_mode(operand)
+                elif opcode == 0x76:
+                    self._select_page(operand)
+                elif opcode == 0x0F and operand in (0xA0, 0xA1):
+                    self._select_page(None, delta=1 if operand == 0xA1 else -1)
                 elif opcode == 7 and operand == 255:
                     self._silent = True
                 else:
@@ -202,4 +306,5 @@ class Runtime:
             finished = True
         finally:
             self._failed = not finished
-        return Execution(steps, tuple(requests), bool(self._queue), self.values, self.context)
+        return Execution(steps, tuple(requests), bool(self._queue), self.values, self.context,
+                         self.mode_state, tuple(self._paints))

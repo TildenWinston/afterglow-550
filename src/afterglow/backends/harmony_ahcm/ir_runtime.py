@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from fractions import Fraction
 
 from .readers import EXPANSION_BUDGET, Reader, UnsupportedNative
 
@@ -48,6 +49,35 @@ def carrier_registers(period_ns: int, on_ns: int) -> CarrierRegisters:
 
 
 @dataclass(frozen=True)
+class ClockTiming:
+    carrier_period_ns: Fraction
+    carrier_on_ns: Fraction
+    duration_tick_ns: Fraction
+
+
+def clock_timing(registers: CarrierRegisters, *, oscillator_hz: int,
+                 timer0_control: int, timer2_control: int) -> ClockTiming:
+    """Conditional PIC18 timer relationship; supplying a clock does not measure it."""
+    _uint(oscillator_hz, 64, "oscillator frequency")
+    if not oscillator_hz:
+        raise ValueError("oscillator frequency must be positive")
+    _uint(timer0_control, 8, "Timer0 control")
+    _uint(timer2_control, 8, "Timer2 control")
+    _uint(registers.period_register, 8, "carrier period register")
+    _uint(registers.duty_register, 8, "carrier duty register")
+    if timer0_control & 0x7F != 1 or timer2_control != 4:
+        raise UnsupportedNative("timer clock/control configuration is outside the reference")
+    if registers.arithmetic_wrapped or registers.fields_truncated:
+        raise UnsupportedNative("wrapped carrier fields do not establish usable clock timing")
+    if registers.duty_register > registers.period_register + 1:
+        raise UnsupportedNative("over-period carrier duty is outside the clock reference")
+    return ClockTiming(
+        Fraction(4_000_000_000 * (registers.period_register + 1), oscillator_hz),
+        Fraction(4_000_000_000 * registers.duty_register, oscillator_hz),
+        Fraction(16_000_000_000, oscillator_hz))
+
+
+@dataclass(frozen=True)
 class SymbolAdmission:
     required_bytes: int
     compared_bytes: int
@@ -73,6 +103,8 @@ class TimerWord:
     delta_ticks: int | None
     preload: int | None
     duty_register: int | None
+    compensation_wrapped: bool
+    deadline_missed: bool | None
 
 
 def timer_word(word: int, *, timer_count: int, duty_register: int,
@@ -83,13 +115,15 @@ def timer_word(word: int, *, timer_count: int, duty_register: int,
     duty = _uint(duty_register, 8, "duty register")
     _flag(phase_complete, "phase-complete flag")
     if word == 0:
-        return TimerWord("stop", None, None, 0)
+        return TimerWord("stop", None, None, 0, False, None)
     if word == 1:
         return TimerWord("stop" if phase_complete else "continue", None, None,
-                         0 if phase_complete else None)
+                         0 if phase_complete else None, False, None)
     delta = ((word & 0x7FFF) - 6) & 0xFFFF
+    wrapped = (word & 0x7FFF) < 6
     return TimerWord("duration", delta, (timer - delta) & 0xFFFF,
-                     duty if word & 0x8000 else 0)
+                     duty if word & 0x8000 else 0, wrapped,
+                     None if wrapped else timer >= delta)
 
 
 class RecordingSelector:

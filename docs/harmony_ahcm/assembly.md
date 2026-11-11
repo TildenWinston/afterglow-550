@@ -86,3 +86,41 @@ validity or hardware capacity. It does not choose a symbol-size ceiling, allocat
 dictionary records, initialize toggles or qualify press/hold/release behavior.
 Those are separate construction and evidence gates. Word packing does not enable
 project generation or change the profile's read-only status.
+
+## Explicit press-only IR candidates
+
+`ir_emit.lower_group(layout, name, commands, command_order=..., spare=...)`
+constructs one named IR group from explicit `Command` settings: portable signal,
+native period, native on-time and command spare. There is no carrier, duty,
+recording, command-order or spare default. The return value retains each command's
+name, native ordinal and named allocation; a command reference targets offset
+seven, the class byte, while its self pointer targets the complete record.
+`group_index(layout, name, groups)` separately declares section five in caller order.
+
+The initial candidate subset is deliberately narrower than native validity:
+one waveform recording with press only, no alternate/hold/release, no leading
+silence and no discarded native-only lead-in. Protocol and opaque signals fail
+explicitly. Carrier fields must avoid known truncation/wrap and agree with the
+portable carrier; a non-half duty needs a portable representation that is not
+supplied by these waveform signals. Command-specific validation for the whole
+group finishes before its first allocation.
+
+`executable_words` preserves interval sums/polarity while moving units from a
+preceding full word to any split tail shorter than seven. An intrinsically short
+interval is unsupported instead of becoming a control token or underflowing the
+timer preload. The storage-only `duration_words` behavior remains unchanged for
+lossless evidence. Neither splitter proves physical timing after splitting.
+
+Each candidate press body is one dictionary symbol with at most 126 words.
+Starting with an empty pulse buffer, this leaves room for the independent terminal
+stop token without wrapping its byte counter. This is a conservative construction
+subset and initial-state assumption, **not** a universal symbol limit or safe
+image-size claim. The group index also avoids low-nibble toggle aliases; this is
+not a claim that the native reader should reject other group counts.
+
+The independent rooted reader, portable converter and phase-stream reference check
+the constructed records. Synthetic offline native-path probes additionally check
+loading/consumption. This can supply a one-device/small-command offline assembly,
+but does not enable whole-project building or normal writes. Physical clock,
+interrupt scheduling and physical key ingress still need the separate evidence
+described in [ir-runtime.md](ir-runtime.md).

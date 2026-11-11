@@ -7,6 +7,7 @@ from itertools import repeat
 import pytest
 
 from afterglow.backends.harmony_ahcm import ahcm, layout
+from afterglow.backends.harmony_ahcm.platform import EventAction, encode_event_table, event_action
 from afterglow.backends.harmony_ahcm.readers import Reader, UnsupportedNative
 from afterglow.backends.harmony_ahcm.runtime import Request, Runtime
 
@@ -19,7 +20,7 @@ def _transition(before, after, opcode, operand, *, lead=0):
     return struct.pack("<Bhh", lead, before, after) + _action(opcode, operand)
 
 
-def _reader(states, actions=(), contexts=(), *, narrow=None):
+def _reader(states, actions=(), contexts=(), *, narrow=None, events=None):
     plan = layout.Layout(header_value=0x1400, spares=[0] * 20)
     narrow = len(states) if narrow is None else narrow
     plan.add("states", struct.pack("<4H", len(states), narrow, len(states) - narrow, narrow)
@@ -40,8 +41,11 @@ def _reader(states, actions=(), contexts=(), *, narrow=None):
                  + b"".join(bytes((tag,)) + _action(opcode, operand)
                             for tag, opcode, operand in entries), owner="contexts")
         plan.relocate("contexts", 1 + 3 * ordinal, f"context-{ordinal}")
+    if events is not None:
+        plan.add("events", encode_event_table(events), owner="events")
     for slot in range(20):
-        plan.root(slot, {9: "contexts", 10: "actions", 13: "states"}.get(slot))
+        target = {9: "contexts", 10: "actions", 13: "states"}.get(slot)
+        plan.root(slot, "events" if slot == 8 and events is not None else target)
     return Reader(ahcm.Image(plan.assemble().payload))
 
 
@@ -198,3 +202,17 @@ def test_an_unbounded_ingress_stream_stops_at_an_inspector_budget():
 
     with pytest.raises(UnsupportedNative, match="ingress inspector budget"):
         runtime.run(repeat((0, 0)))
+
+
+def test_a_selected_platform_event_hands_off_raw_actions_without_claiming_boot_or_ir_completion():
+    reader = _reader([[]], [[(0x80, 1), (0x7D, 0x0207)]],
+                     events=[EventAction(0, 0), EventAction(0, 0x7F)])
+    selected = event_action(reader.image, 1)
+    runtime = _runtime(reader, [0], accept=lambda request: False)
+
+    assert selected is not None
+    result = runtime.run([(selected.opcode, selected.operand)])
+
+    assert result.values == (1,)
+    assert result.requests == (Request("send", 2, 7),)
+    assert result.pending

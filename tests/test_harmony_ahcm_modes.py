@@ -16,6 +16,9 @@ def _image(*, count=2, first_kind=0, wide=False, noop=False):
     plan.add("states", struct.pack("<4H", 1, 1, 0, 1) + bytes(3), owner="states")
     plan.add("state", bytes(7), owner="states")
     plan.relocate("states", 8, "state", size=7)
+    plan.add("actions", b"\x01\x00" + bytes(3), owner="actions")
+    plan.add("action", b"\x03" + struct.pack("<HB", 0x0301, 0x7D) * 3, owner="actions")
+    plan.relocate("actions", 2, "action")
     global_bindings = modes.add_bindings(
         plan, "global-bindings",
         [modes.Binding(tag, EventAction(value, 0x7D))
@@ -45,7 +48,7 @@ def _image(*, count=2, first_kind=0, wide=False, noop=False):
                                        bindings=bindings, pages=pages))
     index = modes.add_mode_index(plan, "mode-index", selected)
     for slot in range(20):
-        plan.root(slot, {6: index, 9: keys, 13: "states"}.get(slot))
+        plan.root(slot, {6: index, 9: keys, 10: "actions", 13: "states"}.get(slot))
     assembly = plan.assemble()
     return Reader(ahcm.Image(assembly.payload)), assembly
 
@@ -215,3 +218,12 @@ def test_setting_and_pushing_an_alternate_context_changes_raw_key_routing():
 
     assert updated.keys == KeyState((0, 0xFD, 0xFC), 0, False)
     assert key.requests == (Request("send", 3, 0x61),)
+
+
+def test_invalidated_key_slots_still_limit_later_action_expansion():
+    reader, _ = _image()
+    runtime = _runtime(reader, mode_state=ModeState(0, 0),
+                       keys=KeyState((0, 0xFD), None, False))
+
+    with pytest.raises(UnsupportedNative, match="discard work"):
+        runtime.run([(0x1F, 0xFF00), (0x7F, 0)] + [(0x1F, 0xFC83)] * 38)

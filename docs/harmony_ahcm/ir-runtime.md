@@ -27,6 +27,25 @@ The API deliberately does not report a physical frequency or safe carrier range.
 Zero/sub-quantum periods and wide values can wrap into plausible registers; that
 does not make them supported commands.
 
+`clock_timing(registers, oscillator_hz=..., timer0_control=...,
+timer2_control=...)` additionally exposes the conditional hardware relationship.
+Under the PIC18 family register model, internal-clock Timer0 with a 1:4 prescaler
+has a duration tick of `16 / Fosc` seconds. Timer2 with prescaler 1 has a PWM
+period of `4 * (PR2 + 1) / Fosc` seconds. Only the established control-register
+shape is modeled, and the API requires the caller to supply the oscillator;
+there is deliberately no default. Results are rational values, not rounded
+microseconds. The same registers at 16 MHz and 48 MHz describe different outputs.
+
+These register interpretations use Microchip's
+[PIC18F2455/2550/4455/4550 data sheet, DS39632E][timer-datasheet],
+sections 11, 13 and 15. They remain conditional on the assessed processor/access
+model and are not an observation of this remote's silicon or active clock.
+The missing fact is the active CPU oscillator frequency after oscillator-source,
+PLL and CPU-divider selection, not the USB clock frequency. The application
+region does not establish those configuration words or all boot-time register
+values. Merely choosing 16 MHz because it reproduces the nominal field units is
+not independent evidence.
+
 ## Atomic dictionary admission, not a universal symbol ceiling
 
 One symbol is checked against the buffer's current queued-byte count before any
@@ -59,8 +78,24 @@ describes the bounded timer-consumer effect:
 
 The subtraction and preload can wrap. Short unmarked durations therefore collide
 with controls or underflow; marking the same low value changes control dispatch.
+The result reports compensation wrap and, where that subtraction is representable,
+whether the sampled timer count has already reached the compensated deadline.
+For example, a seven-unit word avoids control dispatch but misses its deadline if
+the interrupt sample is already one tick late. Avoiding control tokens alone is
+not a sufficient minimum-timing qualification.
 The six-tick compensation is not a measured interrupt cost, and its presence does
 not prove that concatenating storage words preserves physical timing.
+
+The bounded interrupt path does reach the class-5 consumer and restores its saved
+state. The duration update stops Timer0, samples its accumulated count, subtracts
+the compensated duration, writes the preload and restarts the timer. Consequently
+latency before the sample is not simply added to every word: the accumulated count
+participates in the next preload. The timer-stopped path is branch-dependent;
+interrupt masking, prescaler phase and physical clock still prevent a proof of
+exact elapsed duration from instruction counts alone. Timer0 writes also reset
+its prescaler and inhibit increments for two instruction cycles according to the
+data sheet; a host model that advances a timer uniformly through those operations
+would be wrong.
 
 In particular, a storage-only duration splitter can represent a long silence
 exactly as numbers while leaving a final unmarked word of one. That word is not
@@ -97,9 +132,20 @@ check. The caller must bound repeated stepping, especially a held empty body.
 This reference does not simulate timer interrupts, real-time draining, accepted
 key events, intercommand delays or complete scheduler behavior.
 
+The separate platform scan-transition contract supplies an active-key value and
+an explicit held-clear effect. Synthetic scan-to-IR probes establish the software
+bridge: IR priming tests a nonzero active scan value, while replacement/release
+clears the IR-held flag even when a release event is suppressed. An unchanged scan
+does not clear it. This narrows the lifecycle assumption without establishing
+physical switch names, scan/debounce timing or scheduler interleavings. It does
+not make `Runtime` request acceptance equivalent to IR dequeue or completion.
+
 ## Remaining generation boundary
 
 No capability, status or write gate is enabled by these APIs. Physical clock and
 timing correspondence, interrupt scheduling, exact key/hold/release ingress and
 error recovery still block a claim of equivalent emitted waveforms. Imported
 payloads and the embedded bank remain evidence, never generator templates.
+
+[timer-datasheet]:
+  https://archive.org/details/microchip_ds39632e

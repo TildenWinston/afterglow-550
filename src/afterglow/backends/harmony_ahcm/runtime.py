@@ -45,6 +45,25 @@ class Paint:
 
 
 @dataclass(frozen=True)
+class KeyState:
+    stack: tuple[int, ...]
+    alternate: int | None
+    inhibited: bool
+
+    def __post_init__(self):
+        if not isinstance(self.stack, tuple):
+            raise TypeError("key stack must be an immutable tuple")
+        if len(self.stack) > 8:
+            raise UnsupportedNative("key stack aliases runtime storage outside this model")
+        for entry in self.stack:
+            _integer(entry, 255, "key-stack entry")
+        if self.alternate is not None:
+            _integer(self.alternate, 254, "alternate context")
+        if not isinstance(self.inhibited, bool):
+            raise TypeError("key inhibition must be explicit boolean state")
+
+
+@dataclass(frozen=True)
 class Execution:
     steps: int
     requests: tuple[Request, ...]
@@ -53,6 +72,7 @@ class Execution:
     context: int | None
     mode_state: ModeState | None = None
     paints: tuple[Paint, ...] = ()
+    keys: KeyState | None = None
 
 
 def _integer(value: int, maximum: int, label: str) -> None:
@@ -65,7 +85,7 @@ class Runtime:
 
     def __init__(self, reader: Reader, *, values: Sequence[int], context: int | None,
                  accept: Callable[[Request], bool], mode_state: ModeState | None = None,
-                 paint: Callable[[Paint], None] | None = None):
+                 paint: Callable[[Paint], None] | None = None, keys: KeyState | None = None):
         root = reader.image.section(13)
         if root is None:
             raise UnsupportedNative("runtime requires an explicit state table")
@@ -99,6 +119,9 @@ class Runtime:
         self.mode_state = mode_state
         self._paint = paint
         self._paints: list[Paint] = []
+        if keys is not None and not isinstance(keys, KeyState):
+            raise TypeError("key state must be supplied as a KeyState")
+        self.keys = keys
         if mode_state is not None and mode_state.mode is not None and mode_state.page is not None:
             self._mode(mode_state.mode, mode_state.page)
 
@@ -116,7 +139,7 @@ class Runtime:
         for opcode, operand in instructions:
             _integer(opcode, 255, "opcode")
             _integer(operand, 65535, "operand")
-            if opcode == 0x1F and operand >> 8 == 0xFC:
+            if opcode == 0x1F and operand >> 8 == 0xFC and self.keys is None:
                 raise UnsupportedNative("asynchronous key-event routing is not modeled")
             if opcode or operand:
                 pending.append((opcode, operand))
@@ -126,12 +149,15 @@ class Runtime:
         self._queue.extendleft(reversed(pending))
 
     def _context_actions(self, context: int | None, tag: int) -> list[tuple[int, int]]:
+        return self._context_binding(context, tag)[0]
+
+    def _context_binding(self, context: int | None, tag: int
+                         ) -> tuple[list[tuple[int, int]], bool]:
         if context is None:
-            return []
+            return [], False
         self._context_index(context)
         entries = self.reader.tagged(self.reader.image.offset(self._contexts[context]))
-        match = next((entry for entry in entries if entry["tag"] == tag), None)
-        return [(match["opcode"], match["operand"])] if match is not None else []
+        return self._binding(entries, tag)
 
     def _select_context(self, selected: int) -> None:
         context = None if selected == 255 else selected
@@ -144,6 +170,7 @@ class Runtime:
             pending += self._context_actions(context, 1)
         self.context = context
         self._prepend(pending)
+        self._invalidate_keys()
 
     def _mode(self, ordinal: int, page: int) -> dict:
         if 3 + 3 * ordinal > 65535 or 6 + 3 * page > 65535:
@@ -155,18 +182,24 @@ class Runtime:
             raise InvalidImage(f"page {page} is outside mode {ordinal}")
         return record
 
-    @staticmethod
-    def _binding(entries: list[dict], tag: int) -> tuple[list[tuple[int, int]], bool]:
+    def _binding(self, entries: list[dict], tag: int) -> tuple[list[tuple[int, int]], bool]:
+        if self.keys is not None and self.keys.inhibited:
+            return [], False
         entry = next((entry for entry in entries if entry["tag"] == tag), None)
         if entry is None:
             return [], False
         return [(entry["opcode"], entry["operand"])], not entry["flags"] & 1
 
     def _page_actions(self, mode: dict, page: int, tag: int) -> list[tuple[int, int]]:
+        return self._mode_binding(mode, page, tag)[0]
+
+    def _mode_binding(self, mode: dict, page: int, tag: int
+                      ) -> tuple[list[tuple[int, int]], bool]:
         pending, stop = self._binding(mode["pages"][page]["bindings"], tag)
         if not stop:
-            pending += self._binding(mode["bindings"], tag)[0]
-        return pending
+            fallback, stop = self._binding(mode["bindings"], tag)
+            pending += fallback
+        return pending, stop
 
     def _paint_page(self, mode: dict, page: int) -> None:
         if self._paint is None:
@@ -193,6 +226,7 @@ class Runtime:
         self._prepend(pending)
         if not mode["kind"] & 1:
             self._paint_page(mode, 0)
+        self._invalidate_keys()
 
     def _select_page(self, selected: int | None, *, delta: int = 0) -> None:
         if (self.mode_state is None or self.mode_state.mode is None
@@ -209,6 +243,52 @@ class Runtime:
         pending += self._page_actions(mode, page, 0x29)
         self._prepend(pending)
         self._paint_page(mode, page)
+
+    def _invalidate_keys(self) -> None:
+        self._queue = deque(
+            (0, 0) if opcode == 0x1F and operand >> 8 == 0xFC and operand & 0xC0
+            else (opcode, operand) for opcode, operand in self._queue)
+
+    def _key_state(self) -> KeyState:
+        if self.keys is None:
+            raise UnsupportedNative("explicit key-stack state is not supplied")
+        return self.keys
+
+    def _route_key(self, tag: int) -> None:
+        state = self._key_state()
+        if state.inhibited:
+            return
+        pending = []
+        for entry in reversed(state.stack):
+            if entry == 0xFD:
+                if self.mode_state is None:
+                    raise UnsupportedNative("key routing requires explicit current mode state")
+                if self.mode_state.mode is None or self.mode_state.page is None:
+                    continue
+                mode = self._mode(self.mode_state.mode, self.mode_state.page)
+                actions, stop = self._mode_binding(mode, self.mode_state.page, tag)
+            else:
+                selected = (state.alternate if entry == 0xFC else self.context
+                            if entry == 0xFE else None if entry == 0xFF else entry)
+                actions, stop = self._context_binding(selected, tag)
+            pending += actions
+            if stop:
+                break
+        self._prepend(pending)
+
+    def _key_control(self, operation: int, value: int) -> None:
+        state = self._key_state()
+        stack, alternate = list(state.stack), state.alternate
+        if operation == 0xFE:
+            stack.append(value)
+        elif operation == 0xFD:
+            if value in stack:
+                stack.remove(value)
+        else:
+            alternate = None if value == 255 else value
+        self.keys = KeyState(tuple(stack), alternate, state.inhibited)
+        if operation in (0xFD, 0xFE):
+            self._invalidate_keys()
 
     @staticmethod
     def _matches(condition: int, value: int, before: int, after: int) -> bool:
@@ -292,6 +372,10 @@ class Runtime:
                     self._select_context(operand & 255)
                 elif opcode == 0x1F and operand >> 8 in (0xF1, 0xF2):
                     self._write(operand & 255, 0, delta=1 if operand >> 8 == 0xF2 else -1)
+                elif opcode == 0x1F and operand >> 8 == 0xFC:
+                    self._route_key(operand & 255)
+                elif opcode == 0x1F and operand >> 8 in (0xFE, 0xFD, 0xE8):
+                    self._key_control(operand >> 8, operand & 255)
                 elif opcode == 0x7E:
                     self._select_mode(operand)
                 elif opcode == 0x76:
@@ -300,6 +384,8 @@ class Runtime:
                     self._select_page(None, delta=1 if operand == 0xA1 else -1)
                 elif opcode == 7 and operand == 255:
                     self._silent = True
+                elif opcode == operand == 0:
+                    pass
                 else:
                     raise UnsupportedNative(
                         f"action opcode 0x{opcode:02X}, operand 0x{operand:04X} is not modeled")
@@ -307,4 +393,4 @@ class Runtime:
         finally:
             self._failed = not finished
         return Execution(steps, tuple(requests), bool(self._queue), self.values, self.context,
-                         self.mode_state, tuple(self._paints))
+                         self.mode_state, tuple(self._paints), self.keys)

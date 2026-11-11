@@ -186,7 +186,7 @@ A true result means caller-supplied acceptance, **not** optical completion, phys
 timing, or correct hold/release behavior. Callback errors stop the instance rather
 than lose the instruction and permit a later success report.
 
-Unknown instructions, complex transitions, asynchronous key-event routing, silent
+Unknown instructions, complex transitions, unconfigured key-event routing, silent
 state-zero platform refresh, and state-cache storage aliasing stop explicitly.
 The host model handles only disjoint cache storage and consistent, byte-sized
 header counts; these are model limitations, not new native-validity or safe-size
@@ -229,3 +229,29 @@ font state, geometry and peripheral effects belong to a separate rendering contr
 Absent-mode selection, modes without page-zero targets and wrapping native index
 arithmetic remain explicit model limitations. No physical Off/Help/key mapping or
 startup sufficiency follows from these navigation paths.
+
+## Explicit raw key routing
+
+`modes.add_key_sets` allocates an explicitly ordered slot-9 index; the caller chooses
+its root. `Runtime` can consume a raw `0x1F`/`0xFCxx` event token only when supplied
+with `KeyState(stack, alternate, inhibited)`. This is not a physical key-name mapping
+or a debounce/repeat/held-lifetime model.
+
+The stack searches newest first. Entries `0xFC`, `0xFD` and `0xFE` select the alternate
+context, current mode/page and running context; other entries select a literal key
+set, with `0xFF` absent. Page bindings precede mode bindings, then search continues
+down the stack only on fallthrough. Flags and zero-action matches retain the same
+behavior as callback lookup. Inhibition suppresses lookup actions; no physical
+meaning such as USB connection state is assigned to that flag.
+
+Canonical `0x1F` operands with high byte `0xFE` push a stack entry, `0xFD` remove the
+first matching entry from the bottom, and `0xE8` set the alternate context. The
+model stops before unchecked stack growth aliases other runtime storage; this is
+not a native image-capacity or validity assertion.
+
+Mode/context changes and stack push/removal invalidate queued press/release tokens
+whose raw event byte has either high bit set. Their three-byte slots become no-ops,
+not reclaimed capacity: later work must not be accepted by pretending the native
+queue shrank. Raw events can now reach navigation and command requests through
+these explicit states. Off/Help identities, physical scan assignments, rendering
+readiness and IR completion still require their separate contracts.

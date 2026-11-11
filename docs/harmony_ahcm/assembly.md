@@ -124,3 +124,38 @@ loading/consumption. This can supply a one-device/small-command offline assembly
 but does not enable whole-project building or normal writes. Physical clock,
 interrupt scheduling and physical key ingress still need the separate evidence
 described in [ir-runtime.md](ir-runtime.md).
+
+## Component integration is not standalone qualification
+
+Source-owned fonts, explicit LCD-page/text programs, mode/page navigation, entry
+actions, raw key routing and a small portable device's press-only IR records can
+be linked and checked together. The integration fixture constructs its image in
+memory with file reads forbidden, checks deterministic bytes and independent
+rooted decoding, and exercises both explicit entry selectors. It does not emit a
+deployable artifact or bypass the read-only project-build gate.
+
+The remaining external inputs are specific: active oscillator/PLL/divider/source
+and physical edge/interrupt timing; printed-key-to-raw-scan correlation; and the
+provisioned-user versus factory-fallback and physical display/status contracts.
+Frame acceptance, initialized source-owned cache records and matching software
+handoffs do not establish these other states. A valid selected user configuration
+is a conditional precondition, not permission to repair or overwrite provisioning.
+
+There is a possible **non-device evidence route**, not a new acquisition request:
+already-existing authorized manufacturer/build or board records could establish
+the confirmed processor/revision, oscillator source, configuration/fuse words and
+reset/runtime clock-selection chain. Existing matching matrix/wiring or raw
+scan-to-key records could establish physical key correlation. Such records must
+be tied to the actual model/revision; a host part-name table, related remote,
+nominal IR field or crystal value alone is not sufficient. The current captured
+region does not establish those missing inputs.
+
+The [Microchip PIC18F2455/2550/4455/4550 family data sheet][clock-reference] is a
+conditional clock/register reference, **not confirmation that a particular 550
+uses that processor or clock state**. A data sheet explains supplied configuration;
+it cannot supply absent configuration or physical timing evidence. Until suitable
+matching evidence exists, oscillator-dependent calculations remain parameterized
+and emitted-waveform equivalence, physical navigation and standalone usability
+remain unqualified. No additional device access or support promotion follows.
+
+[clock-reference]: https://ww1.microchip.com/downloads/en/DeviceDoc/39632D.pdf

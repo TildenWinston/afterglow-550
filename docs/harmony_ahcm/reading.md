@@ -158,7 +158,11 @@ not load initial values from a donor or infer boot state.
 The supported subset is indexed action calls (`0x7F`), direct state writes
 (`0x80..0xFF`, state index in the low seven bits), ordinary type-0 transitions,
 context selection (`0x1F` with operand high byte `0xFF`), and one-write transition
-suppression (`0x07`, operand `0x00FF`). New actions run ahead of the remaining queue
+suppression (`0x07`, operand `0x00FF`). Relative state steps use `0x1F` with high byte
+`0xF1` (decrement) or `0xF2` (increment) and state index in the low byte, wrapping
+through zero and the declared maximum. The modeled relative path requires the
+previous cache value to be within that range; other initial conditions stop rather
+than assume equivalent arithmetic. New actions run ahead of the remaining queue
 in their original order, including nested calls and transition actions. A changed
 context requests the old context's tag 2 then the new context's tag 1; selecting the
 same context requests tag 5. These are native tags, not physical button names.

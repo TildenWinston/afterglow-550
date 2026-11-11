@@ -121,13 +121,17 @@ class Runtime:
             return before != after
         return condition & 0xFFFF == value
 
-    def _write(self, ordinal: int, value: int) -> None:
+    def _write(self, ordinal: int, value: int, *, delta: int | None = None) -> None:
         if ordinal >= len(self._values):
             raise InvalidImage(f"state {ordinal} is outside its declared index")
-        if self._silent and ordinal == 0:
+        if delta is None and self._silent and ordinal == 0:
             raise UnsupportedNative("silent state-zero platform refresh is not modeled")
         state = self.reader.state(ordinal)
         before = self._values[ordinal]
+        if delta is not None:
+            if before > state["maximum"]:
+                raise UnsupportedNative("relative state adjustment outside its declared range")
+            value = (before + delta) % (state["maximum"] + 1)
         self._values[ordinal] = value & (255 if ordinal < self._narrow else 65535)
         if not self._silent:
             pending = []
@@ -188,6 +192,8 @@ class Runtime:
                         break
                 elif opcode == 0x1F and operand >> 8 == 0xFF:
                     self._select_context(operand & 255)
+                elif opcode == 0x1F and operand >> 8 in (0xF1, 0xF2):
+                    self._write(operand & 255, 0, delta=1 if operand >> 8 == 0xF2 else -1)
                 elif opcode == 7 and operand == 255:
                     self._silent = True
                 else:

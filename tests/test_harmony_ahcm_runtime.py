@@ -216,3 +216,20 @@ def test_a_selected_platform_event_hands_off_raw_actions_without_claiming_boot_o
     assert result.values == (1,)
     assert result.requests == (Request("send", 2, 7),)
     assert result.pending
+
+
+@pytest.mark.parametrize("initial,delta,expected", [(0, -1, 7), (7, 1, 0), (3, 1, 4)])
+def test_relative_input_steps_wrap_through_the_declared_maximum(initial, delta, expected):
+    reader = _reader([[_transition(-3, expected, 0x7D, 5)]])
+    runtime = _runtime(reader, [initial])
+    result = runtime.run([(0x1F, 0xF200 if delta == 1 else 0xF100)])
+
+    assert result.values == (expected,)
+    assert result.requests == (Request("send", 0, 5),)
+
+
+def test_relative_adjustment_does_not_invent_wrapping_for_an_out_of_range_cache():
+    runtime = _runtime(_reader([[]]), [8])
+
+    with pytest.raises(UnsupportedNative, match="outside its declared range"):
+        runtime.run([(0x1F, 0xF200)])

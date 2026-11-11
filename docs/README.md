@@ -50,3 +50,4 @@ Reference documentation for supported remote architectures and configuration for
 - [image.md](harmony_ahcm/image.md) - Donor identity, twenty native slots, address domains and checksum
 - [assembly.md](harmony_ahcm/assembly.md) - Explicit allocations, rooted references and offline framing scope
 - [reading.md](harmony_ahcm/reading.md) - Rooted IR, mode, action, state and monochrome text readers
+- [platform.md](harmony_ahcm/platform.md) - Counted inline platform-event action handoff and remaining startup limits

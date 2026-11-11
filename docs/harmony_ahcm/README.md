@@ -6,6 +6,7 @@ interpretation belongs to the `harmony-ahcm` backend.
 
 - [image.md](image.md) describes measured identity, framing, logical pointers and integrity.
 - [reading.md](reading.md) describes rooted native readers, IR, state and glyph evidence.
+- [platform.md](platform.md) describes the bounded platform-event action handoff.
 
 The profile remains **read-only**. Native structural validity proves neither firmware
 acceptance nor a safe write size. An imported configuration is evidence, never a template

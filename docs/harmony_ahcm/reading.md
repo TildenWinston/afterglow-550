@@ -146,3 +146,46 @@ idle; unresolved activity labels remain plain placeholders.
 Framing-only validation reports its scope explicitly. A rooted inventory's
 `complete` flag refers only to the supported readers attempted, not to every native
 subsystem, portability, bootability or hardware acceptance.
+
+## Conditional action execution
+
+The backend's `runtime.Runtime` is a bounded action/state interpreter, not a firmware
+VM or startup implementation. Its caller supplies every initial cache value, the
+current context (or `None`), and a peripheral-acceptance callback explicitly. It
+assumes a selected, readable configuration and no concurrent key ingress. It does
+not load initial values from a donor or infer boot state.
+
+The supported subset is indexed action calls (`0x7F`), direct state writes
+(`0x80..0xFF`, state index in the low seven bits), ordinary type-0 transitions,
+context selection (`0x1F` with operand high byte `0xFF`), and one-write transition
+suppression (`0x07`, operand `0x00FF`). New actions run ahead of the remaining queue
+in their original order, including nested calls and transition actions. A changed
+context requests the old context's tag 2 then the new context's tag 1; selecting the
+same context requests tag 5. These are native tags, not physical button names.
+
+Type-0 from/to conditions use `-2` as wildcard and `-3` as a changed-value predicate;
+other bit patterns compare exactly. A matched transition with lead bit 7 stops
+the search. Equal-value writes are not deduplicated: an exact equal-value transition
+can still request an action. Narrow cache values truncate to eight bits while the
+transition compares the full requested value; wide cache values retain sixteen.
+
+IR sends and device-relative delays reach explicit `Request` boundaries, not an
+assumed transmitter or global clock. A callback returning false leaves that same
+instruction pending, with later work untouched; only a caller-requested run retries.
+A true result means caller-supplied acceptance, **not** optical completion, physical
+timing, or correct hold/release behavior. Callback errors stop the instance rather
+than lose the instruction and permit a later success report.
+
+Unknown instructions, complex transitions, asynchronous key-event routing, silent
+state-zero platform refresh, and state-cache storage aliasing stop explicitly.
+The host model handles only disjoint cache storage and consistent, byte-sized
+header counts; these are model limitations, not new native-validity or safe-size
+gates. Queue overflow is reported as discarded-work risk rather than returned as a
+complete behavior trace. Ingress and execution budgets bound host work. A failed
+instance cannot resume; a new one needs explicit initial state.
+
+Synthetic scenarios cover ordinary first/repeated context entry, shared-device
+power/input transitions and an explicit off-state action plan. That does not
+establish the platform Off button, Help questions/correction, display changes,
+peripheral lifecycle, or complete activity support. Generation capabilities and
+the profile's read-only status remain unchanged.

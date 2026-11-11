@@ -37,6 +37,10 @@ EXPECTED = (
     "harmony_800/lists-and-instructions.md",
     "harmony_800/hardware.md",
     "harmony_800/drawing.md",
+    "harmony_ahcm/README.md",
+    "harmony_ahcm/image.md",
+    "harmony_ahcm/assembly.md",
+    "harmony_ahcm/reading.md",
 )
 
 

@@ -732,11 +732,11 @@ class UpdateTab(QWidget):
         return project_remote(self.project)
 
     def _name_the_write(self):
-        """An experimental remote is written the same way, backed up first."""
+        """Experimental artifacts are qualified outside the normal write path."""
         verified = self._profile().verified
         self.flash_btn.setToolTip(
-            "" if verified else "This remote's support is experimental: what is on it is "
-            "saved to the Dumps folder before anything is written")
+            "" if verified else "Normal writes require verified support. Experimental "
+            "artifacts can be exported for separately authorized controlled first-write testing.")
 
     def refresh(self):
         """The project's remote changed; the next Flash builds for the new one."""
@@ -967,27 +967,31 @@ class UpdateTab(QWidget):
 
     def flash(self):
         """Build the project as it is on screen and write it, after one confirmation."""
+        from .. import remotes
+        profile = self._profile()
+        try:
+            profile.require_writable()
+        except remotes.NotWritable as exc:
+            QMessageBox.warning(
+                self, "Normal write unavailable",
+                f"{exc}\n\nUse File > Export .ezhex for an experimental artifact, then "
+                "follow the separately authorized command-line process in "
+                "docs/first-write.md. Nothing was written.")
+            return
         if not self._ready_to_build():
             return
-        profile = self._profile()
-        if profile.verified:
-            answer = QMessageBox.question(
-                self, "Flash to Remote",
-                f"Build this project and write it to the {profile.model}?\n\n"
-                "This replaces everything on it. If you have not saved the remote's "
-                "current configuration, cancel and use Read from Remote first - "
-                "there is no way to get it back afterwards.",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No)
-            if answer != QMessageBox.StandardButton.Yes:
-                return
-            backup = None
-        else:
-            backup = self._confirm_experimental(profile)
-            if backup is None:
-                return
+        answer = QMessageBox.question(
+            self, "Flash to Remote",
+            f"Build this project and write it to the {profile.model}?\n\n"
+            "This replaces everything on it. If you have not saved the remote's "
+            "current configuration, cancel and use Read from Remote first - "
+            "there is no way to get it back afterwards.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No)
+        if answer != QMessageBox.StandardButton.Yes:
+            return
         out_path = self.out_path()
-        options = {"backup": str(backup)} if backup else {}
+        options = {}
         # The welcome on "first flash only": built without it, and the write builds it
         # in once it has seen that the remote holds no configuration of ours (welcome.py)
         from .. import welcome
@@ -999,28 +1003,3 @@ class UpdateTab(QWidget):
             options.update(welcome_project=build, build_root=str(user_folder("generated")))
         self._build(out_path, lambda: self._run(
             "write", path=str(out_path), **options).start(), project=build)
-
-    def _confirm_experimental(self, profile):
-        """Warn, and name the backup a write will take first; None if cancelled.
-
-        A remote's own safe mode recovers it from a configuration that does not work, and
-        the backup puts it back as it was. Asking for more than one confirmation, or
-        checking a read-back byte for byte, stopped no one and failed good writes."""
-        from datetime import datetime
-        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        backup = user_folder("dumps") / f"{profile.id}-before-write-{stamp}.ezhex"
-        box = QMessageBox(self)
-        box.setIcon(QMessageBox.Icon.Warning)
-        box.setWindowTitle("Flash to Remote")
-        box.setText(f"Build this project and write it to the {profile.model}?")
-        box.setInformativeText(
-            f"Support for the {profile.model} is experimental: configurations built "
-            "for it have been tried on only a few remotes, so something may not work.\n\n"
-            "Before writing, Afterglow saves what is on the remote now to\n"
-            f"{backup}\n\n"
-            "If the remote does not work afterwards, put that file back with Settings › "
-            "Flash a Configuration File, and please tell us what happened.")
-        write = box.addButton("Back up and write", QMessageBox.ButtonRole.AcceptRole)
-        box.addButton(QMessageBox.StandardButton.Cancel)
-        box.exec()
-        return backup if box.clickedButton() is write else None

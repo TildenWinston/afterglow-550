@@ -71,10 +71,16 @@ def test_a_new_project_asks_before_throwing_unsaved_work_away(window, monkeypatc
     assert window.settings_tab.first_name.text() == "Ann"     # still there
 
 
-def test_the_status_bar_shows_the_remote_and_what_is_in_the_project(window):
+@pytest.mark.parametrize(("remote_id", "expected"), [
+    ("harmony-900", "Harmony 900 · verified"),
+    ("harmony-1100", "Harmony 1100 · experimental"),
+    ("harmony-550", "Harmony 550 · read-only"),
+], ids=["verified", "experimental", "read-only-550"])
+def test_the_status_bar_shows_the_remote_and_what_is_in_the_project(window, remote_id, expected):
+    window.project["settings"]["remote"] = remote_id
     window.project["devices"].append({"id": "1", "label": "TV"})
     window._mark_dirty()
-    assert window.status.remote.text() == "Harmony 900 · verified"
+    assert window.status.remote.text() == expected
     assert window.status.contents.text() == "1 device · 0 activities"
 
 

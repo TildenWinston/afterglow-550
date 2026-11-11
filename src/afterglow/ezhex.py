@@ -305,10 +305,14 @@ def _header_for(src_dir, payload, profile=None):
             from . import remotes
             profile = remotes.default()
         header = header_for_profile(profile)
-    header = re.sub(rb"<BINARYDATASIZE>\d+</BINARYDATASIZE>",
-                    ("<BINARYDATASIZE>%d</BINARYDATASIZE>" % len(payload)).encode(), header)
-    return re.sub(rb"<CHECKSUM>\d+</CHECKSUM>",
-                  ("<CHECKSUM>%d</CHECKSUM>" % checksum(payload)).encode(), header)
+    for tag, value in ((b"BINARYDATASIZE", len(payload)), (b"CHECKSUM", checksum(payload))):
+        header = re.sub(
+            rb"(<" + tag + rb">)(\d+)(</" + tag + rb">)",
+            lambda match, value=value: (
+                match.group(0) if int(match.group(2)) == value else
+                match.group(1) + str(value).encode("ascii") + match.group(3)),
+            header)
+    return header
 
 
 def pack_standalone(src_dir, out_path, do_rehash=True, profile=None):
@@ -318,7 +322,7 @@ def pack_standalone(src_dir, out_path, do_rehash=True, profile=None):
     # No header means this tree was not unpacked from a config, so the tree itself has
     # to say what it is. `ezhex.py` must not guess a format, and must not know which
     # files any format keeps - both are the payload type's business.
-    backend = backend_for(header) if header else payloads.identify_tree(src_dir)
+    backend = _backend_for_tree(header, src_dir)
     if do_rehash and hasattr(backend, "rehash"):
         backend.rehash(src_dir)
     payload = backend.build(src_dir)
@@ -352,8 +356,20 @@ def rehash(work_dir):
     """
     header_path = os.path.join(work_dir, ".ezhex_header")
     header = _header_beside(header_path)
-    backend = backend_for(header) if header else payloads.identify_tree(work_dir)
+    backend = _backend_for_tree(header, work_dir)
     return backend.rehash(work_dir) if hasattr(backend, "rehash") else None
+
+
+def _backend_for_tree(header, src_dir):
+    """Identify an unknown profile's preserved tree without changing its header."""
+    from . import remotes
+
+    if header:
+        try:
+            return backend_for(header)
+        except remotes.UnknownRemote:
+            pass
+    return payloads.identify_tree(src_dir)
 
 
 def main(argv=None):

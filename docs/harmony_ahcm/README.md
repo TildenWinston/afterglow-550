@@ -8,6 +8,7 @@ interpretation belongs to the `harmony-ahcm` backend.
 - [reading.md](reading.md) describes rooted native readers, IR, state and glyph evidence.
 - [ir-runtime.md](ir-runtime.md) describes bounded nominal IR consumption and its
   explicit physical-timing and scheduler limits.
+- [platform.md](platform.md) describes the bounded platform-event action handoff.
 
 The profile remains **read-only**. Native structural validity proves neither firmware
 acceptance nor a safe write size. An imported configuration is evidence, never a template

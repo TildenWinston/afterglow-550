@@ -231,24 +231,50 @@ def test_uncertain_write_is_never_automatically_retried(tmp_path, build, monkeyp
             remote_factory=factory)
 
 
-def test_the_normal_write_takes_an_experimental_profile_and_refuses_a_read_only_one(
+@pytest.mark.parametrize("status", [remotes.READ_ONLY, remotes.EXPERIMENTAL])
+@pytest.mark.parametrize("accept", [{}, {"accept_unconfirmed": True},
+                                  {"accept_unknown_skin": True},
+                                  {"accept_mismatched": True}])
+def test_identity_overrides_never_authorize_an_unverified_normal_write(
+        tmp_path, build, monkeypatch, status, accept):
+    from afterglow import concord
+
+    artifact = build(_project())
+    profile = replace(remotes.get("harmony-900"), status=status)
+    monkeypatch.setattr(remotes, "identify", lambda _header: profile)
+
+    class Remote(concord.Remote):
+        def __init__(self):
+            self.writes = []
+
+        def identity(self):
+            return _identity(artifact)
+
+        def _apply_config(self, path, **_kwargs):
+            self.writes.append(path)
+
+    remote = Remote()
+    with pytest.raises(concord.RemoteError, match=status):
+        remote.write_config(artifact, **accept)
+    assert remote.writes == []
+
+
+def test_only_the_controlled_path_authorizes_an_experimental_artifact(
         tmp_path, build, monkeypatch):
     from afterglow import concord
 
     artifact = build(_project())
     profile = replace(remotes.get("harmony-900"), status=remotes.EXPERIMENTAL)
     monkeypatch.setattr(remotes, "identify", lambda _header: profile)
-    concord.Remote._verify_intended_for(artifact, _identity(artifact))
-
-    profile = replace(profile, status=remotes.READ_ONLY)
-    monkeypatch.setattr(remotes, "identify", lambda _header: profile)
-    with pytest.raises(concord.RemoteError, match="read-only"):
-        concord.Remote._verify_intended_for(artifact, _identity(artifact))
+    assert concord.Remote._verify_intended_for(
+        artifact, _identity(artifact), allow_experimental=True) == profile
+    with pytest.raises(concord.OtherRemote, match="Nothing was written"):
+        concord.Remote._verify_intended_for(
+            artifact, {**_identity(artifact), "skin": 54}, allow_experimental=True)
 
 
 def test_restore_writes_back_only_the_captured_recovery(tmp_path, build, monkeypatch):
-    """An experimental remote cannot go through the normal write path, so without this
-    a tester whose remote misbehaved held a backup they could not put back."""
+    """Recovery bypasses the normal generated-config gate, never its own digest checks."""
     _artifact, profile, _identity_data, writes, factory, report, prepared = \
         _prepared(tmp_path, build, monkeypatch)
     phrase = f"RESTORE {profile.id} {prepared['recovery']['sha256'][:12]}"
@@ -299,6 +325,26 @@ def test_a_tampered_recovery_is_not_written(tmp_path, build, monkeypatch):
         first_write.restore(report, ask=lambda _p: pytest.fail("must not prompt"),
                             remote_factory=factory)
     assert writes == [Path(prepared["artifact"]["path"]).resolve()]
+
+
+def test_a_process_interrupted_during_restore_can_repeat_the_captured_recovery(
+        tmp_path, build, monkeypatch):
+    _artifact, profile, identity, writes, factory, report, prepared = \
+        _prepared(tmp_path, build, monkeypatch)
+    first_write.apply(report, ask=lambda _p: prepared["confirmation"], remote_factory=factory)
+    phrase = f"RESTORE {profile.id} {prepared['recovery']['sha256'][:12]}"
+
+    class Interrupted(FakeRemote):
+        def _apply_config(self, path):
+            raise KeyboardInterrupt()
+
+    with pytest.raises(KeyboardInterrupt):
+        first_write.restore(
+            report, ask=lambda _p: phrase,
+            remote_factory=lambda: Interrupted(prepared["artifact"]["path"], identity, writes))
+    assert json.loads(report.read_text())["status"] == "restore-started"
+    assert first_write.restore(
+        report, ask=lambda _p: phrase, remote_factory=factory)["status"] == "restored"
 
 
 def _one_build(tmp_path, label, name):

@@ -42,6 +42,7 @@ EXPECTED = (
     "harmony_ahcm/reading.md",
     "harmony_ahcm/ir-runtime.md",
     "harmony_ahcm/assembly.md",
+    "harmony_ahcm/platform.md",
 )
 
 

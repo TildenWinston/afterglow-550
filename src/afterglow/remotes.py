@@ -523,14 +523,13 @@ class RemoteProfile:
         return re.sub(r"(?<=[a-z])(?=[A-Z0-9])", " ", key)
 
     def require_writable(self) -> None:
-        """Whatever can be built can be written. An experimental remote is written the
-        same way as a verified one, after a warning and a backup the interface takes
-        first (UpdateTab.flash): a separate test-write flow with typed phrases and
-        byte-exact read-back checks only failed good writes, and stopped no one."""
-        if not self.buildable:
+        """Normal generated-config writes require hardware-verified support."""
+        if not self.verified:
             raise NotWritable(
                 f"{self.model} (skin {self.skin}) is {self.status}: its configurations "
-                "can be read and inspected, but Afterglow does not build or write them."
+                "cannot be written through the normal application flow. Experimental "
+                "qualification requires the separately authorized controlled first-write "
+                "process; read-only profiles cannot build configurations."
             )
 
     def require_buildable(self) -> None:

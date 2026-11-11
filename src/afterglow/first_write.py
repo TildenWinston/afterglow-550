@@ -1,7 +1,7 @@
 """Recovery-backed first hardware write for an experimental remote profile.
 
-A developer's tool, separate from the application's write (which backs the remote up
-and writes, for experimental remotes too):
+The separately authorized qualification route for experimental profiles; normal
+generated-config writes require verified support:
 
     afterglow-first-write prepare candidate.ezhex --recovery recovery.ezhex \
         --report first-write.json
@@ -275,7 +275,7 @@ def readback(report, out, *, remote_factory=concord.Remote) -> dict:
 # Anything after preparation. A prepared report has written nothing, so there is nothing
 # to restore; every later state may need the remote's own configuration back.
 RESTORABLE = {"write-started", "write-outcome-unknown", "written-awaiting-readback",
-              "readback-verified", "restore-outcome-unknown", "restored"}
+              "readback-verified", "restore-started", "restore-outcome-unknown", "restored"}
 
 
 def restore(report, *, ask=input, remote_factory=concord.Remote) -> dict:

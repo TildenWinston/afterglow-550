@@ -29,12 +29,20 @@ Nothing is sent anywhere.
 
 - **Supported**
   - Harmony 900
-- **Experimental** - configurations are read, imported, built and written, but not yet
-  confirmed on every remote. Before each write Afterglow saves what is on the remote to
-  the `Dumps` folder, and **Settings › Flash a Configuration File** puts it back.
+- **Experimental** - configurations can be read, imported, built and exported, but
+  normal **Flash to Remote** writes are blocked until support is verified. Hardware
+  qualification requires separate owner authorization and the
+  [controlled first-write process](docs/first-write.md), including validated recovery,
+  explicit confirmation and readback. **Settings › Flash a Configuration File** remains
+  available for restoring a backup, not bypassing qualification.
   - Harmony 1100
   - Harmony One
   - Harmony 800 - a prototype Logitech never sold
+
+**Harmony 550 is in development and has a read-only profile.** The current backend
+validates native framing, preserves carriers and partially imports portable devices
+and signals. Unresolved controls and activity behavior remain native evidence with
+warnings. Project generation and qualified generated-image writes are not available.
 
 ## Before you start
 
@@ -71,8 +79,10 @@ Then:
 
 - **File > Import** that backup to bring your existing devices and activities into Afterglow - or skip it and start from an empty project.
 - Set your equipment up on the **Devices** and **Activities** tabs.
-- Back on **Flash**, choose **Flash to Remote**. It builds the project as it is and writes it;
-  **File > Export .ezhex** saves the built file instead, without writing anything.
+- For a verified remote, choose **Flash to Remote**. It builds the project as it is and
+  writes it; **File > Export .ezhex** saves the built file instead, without writing
+  anything. Experimental artifacts require the separately authorized qualification
+  process described above.
 
 ### What you can set up
 
@@ -90,9 +100,9 @@ Importing takes your devices and activities and leaves the other remote's state 
 **Your files** are all in `Documents/Afterglow`, a folder for each kind:
 
 - `Projects` - your projects, and shareable projects you open
-- `Dumps` - configurations read from a remote, ones you import, and the backup taken
-  before writing an experimental remote
-- `Generated` - configurations Afterglow builds, which **Flash** writes
+- `Dumps` - configurations read from a remote and ones you import. Keep recovery copies
+  here or another safe location before an explicitly authorized controlled first write.
+- `Generated` - configurations Afterglow builds, which **Flash** writes for verified profiles
 - `Themes` - looks for the remotes whose screens can be restyled; each comes with an
   `Example` and a `README.md` saying what to change
 - `Backups` - earlier versions of each project, kept every time it is saved (**File > Show
@@ -128,6 +138,11 @@ python3 -m venv .venv && .venv/bin/pip install -e '.[dev,gui]'
 From source it uses the libconcord installed on the system. To use Afterglow's own build
 instead (needed for direct access), point `AFTERGLOW_LIBCONCORD` at the library file, for
 example `AFTERGLOW_LIBCONCORD=~/concordance/libconcord/.libs/libconcord.so.6`.
+
+Use `--concord-check` with the source launcher to check library loading without
+connecting to a remote. On Windows, the loader initializes Python's matching SSL
+runtime before libconcord. An SSL-runtime initialization failure is a host-library
+error, not a remote identity or configuration error.
 
 ## Special Thanks
 

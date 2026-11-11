@@ -177,7 +177,9 @@ def test_source_owned_pages_link_the_event_font_and_paint_contract_without_a_don
     selected = modes.add_mode(planned, "authored-mode", kind=0, bindings=empty, pages=pages)
     modes.add_mode_index(planned, "modes", [selected])
     planned.add("events", platform.encode_event_table(
-        [platform.EventAction(0, 0), platform.EventAction(0, 0x7E)]), owner="platform-events")
+        [platform.EventAction(0, 0), platform.EventAction(0, 0x7E),
+         platform.EventAction(0, 0), platform.EventAction(0, 0),
+         platform.EventAction(0, 0x7E)]), owner="platform-events")
     planned.add("explicit-empty-state-table", bytes(8), owner="synthetic-states")
     for slot in range(20):
         planned.root(slot, {6: "modes", 7: "fonts", 8: "events",
@@ -195,15 +197,16 @@ def test_source_owned_pages_link_the_event_font_and_paint_contract_without_a_don
                   for code in bytes.fromhex(text["codes_hex"])]
         observed.append((request.mode, request.page, text["x"], text["y"], shapes))
 
-    runtime = Runtime(reader, values=[], context=None, accept=lambda _request: False,
-                      mode_state=ModeState(None, None), paint=paint)
-    handoff = platform.event_action(reader.image, 1)
-    assert handoff is not None
-    runtime.run([(handoff.opcode, handoff.operand)])
-    runtime.run([(0x0F, 0xA1)])
-    runtime.run([(0x0F, 0xA1)])
+    for selector in (1, 4):
+        runtime = Runtime(reader, values=[], context=None, accept=lambda _request: False,
+                          mode_state=ModeState(None, None), paint=paint)
+        handoff = platform.event_action(reader.image, selector)
+        assert handoff is not None
+        runtime.run([(handoff.opcode, handoff.operand)])
+        runtime.run([(0x0F, 0xA1)])
+        runtime.run([(0x0F, 0xA1)])
 
     assert observed == [(0, 0, 3, 2, [first_shape]),
                         (0, 1, 4, 2, [second_shape]),
-                        (0, 0, 3, 2, [first_shape])]
+                        (0, 0, 3, 2, [first_shape])] * 2
     assert planned.assemble() == assembled

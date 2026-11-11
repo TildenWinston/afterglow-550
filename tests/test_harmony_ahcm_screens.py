@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import pytest
 
-from afterglow.backends.harmony_ahcm import ahcm, layout, screens
+from afterglow.backends.harmony_ahcm import ahcm, layout, modes, platform, screens
 from afterglow.backends.harmony_ahcm.readers import Reader, UnsupportedNative
+from afterglow.backends.harmony_ahcm.runtime import ModeState, Runtime
 
 
 def _glyph(raw: bytes, height: int) -> tuple[Reader, dict]:
@@ -97,7 +98,7 @@ def test_source_owned_fonts_and_text_are_built_from_explicit_inputs_not_an_impor
     target = screens.add_font(planned, "authored-font", first_code=7, glyphs=shapes)
     screens.add_font_index(planned, "fonts", [None, target])
     program = screens.encode_text_program(
-        font_index=1, lines=[screens.TextLine(3, 2, b"\x07\x08"),
+        display_page=0, font_index=1, lines=[screens.TextLine(3, 2, b"\x07\x08"),
                              screens.TextLine(8, 4, b"")])
     planned.add("program", program, owner="synthetic-screen")
     first = planned.assemble()
@@ -108,10 +109,11 @@ def test_source_owned_fonts_and_text_are_built_from_explicit_inputs_not_an_impor
     font = reader.font(1)
     assert [reader.glyph(font, code) for code in (7, 8)] == shapes
     assert reader.screen(first.offset("program")) == [
-        {"offset": first.offset("program"), "opcode": 16, "operands_hex": "01"},
-        {"offset": first.offset("program") + 2, "opcode": 5,
+        {"offset": first.offset("program"), "opcode": 22, "operands_hex": "00"},
+        {"offset": first.offset("program") + 2, "opcode": 16, "operands_hex": "01"},
+        {"offset": first.offset("program") + 4, "opcode": 5,
          "x": 3, "y": 2, "codes_hex": "0708"},
-        {"offset": first.offset("program") + 8, "opcode": 5,
+        {"offset": first.offset("program") + 10, "opcode": 5,
          "x": 8, "y": 4, "codes_hex": ""},
     ]
 
@@ -145,10 +147,63 @@ def test_text_codes_never_introduce_a_hidden_terminator_or_guessed_extended_mapp
 
 def test_text_programs_require_explicit_valid_font_coordinates_and_typed_source_lines():
     with pytest.raises(ValueError, match="font"):
-        screens.encode_text_program(font_index=True, lines=[])
+        screens.encode_text_program(display_page=0, font_index=True, lines=[])
     with pytest.raises(ValueError, match="coordinate"):
         screens.TextLine(-1, 0, b"\x01")
     with pytest.raises(TypeError, match="immutable"):
         screens.TextLine(0, 0, bytearray(b"\x01"))
     with pytest.raises(TypeError, match="TextLine"):
-        screens.encode_text_program(font_index=0, lines=[(0, 0, b"\x01")])
+        screens.encode_text_program(display_page=0, font_index=0, lines=[(0, 0, b"\x01")])
+    with pytest.raises(ValueError, match="display page"):
+        screens.encode_text_program(display_page=-1, font_index=0, lines=[])
+
+
+def test_source_owned_pages_link_the_event_font_and_paint_contract_without_a_donor_template():
+    planned = layout.Layout(header_value=0x030201, spares=tuple(range(20)))
+    first_shape, second_shape = [[1, 0, 1]], [[0, 1]]
+    screens.add_font(planned, "authored-font", first_code=7,
+                     glyphs=[first_shape, second_shape])
+    screens.add_font_index(planned, "fonts", ["authored-font"])
+    empty = modes.add_bindings(planned, "no-callbacks", [], wide=True)
+    pages = []
+    for ordinal, code in enumerate((7, 8)):
+        name = f"authored-program-{ordinal}"
+        planned.add(name, screens.encode_text_program(
+            display_page=0, font_index=0,
+            lines=[screens.TextLine(3 + ordinal, 2, bytes((code,)))]),
+            owner="synthetic-screen")
+        pages.append(modes.add_page(
+            planned, f"page-{ordinal}", bindings=empty, program=name))
+    selected = modes.add_mode(planned, "authored-mode", kind=0, bindings=empty, pages=pages)
+    modes.add_mode_index(planned, "modes", [selected])
+    planned.add("events", platform.encode_event_table(
+        [platform.EventAction(0, 0), platform.EventAction(0, 0x7E)]), owner="platform-events")
+    planned.add("explicit-empty-state-table", bytes(8), owner="synthetic-states")
+    for slot in range(20):
+        planned.root(slot, {6: "modes", 7: "fonts", 8: "events",
+                            13: "explicit-empty-state-table"}.get(slot))
+    assembled = planned.assemble()
+    reader = Reader(ahcm.Image(assembled.payload))
+    observed = []
+
+    def paint(request):
+        instructions = reader.screen(reader.image.offset(request.program))
+        assert instructions[0]["opcode"] == 22
+        font_index = bytes.fromhex(instructions[1]["operands_hex"])[0]
+        text = instructions[2]
+        shapes = [reader.glyph(reader.font(font_index), code)
+                  for code in bytes.fromhex(text["codes_hex"])]
+        observed.append((request.mode, request.page, text["x"], text["y"], shapes))
+
+    runtime = Runtime(reader, values=[], context=None, accept=lambda _request: False,
+                      mode_state=ModeState(None, None), paint=paint)
+    handoff = platform.event_action(reader.image, 1)
+    assert handoff is not None
+    runtime.run([(handoff.opcode, handoff.operand)])
+    runtime.run([(0x0F, 0xA1)])
+    runtime.run([(0x0F, 0xA1)])
+
+    assert observed == [(0, 0, 3, 2, [first_shape]),
+                        (0, 1, 4, 2, [second_shape]),
+                        (0, 0, 3, 2, [first_shape])]
+    assert planned.assemble() == assembled

@@ -89,3 +89,13 @@ def add_mode_index(plan: Layout, name: str, modes: Sequence[str]) -> str:
     for ordinal, mode in enumerate(modes):
         plan.relocate(name, 3 + 3 * ordinal, mode, size=6)
     return name
+
+
+def add_key_sets(plan: Layout, name: str, bindings: Sequence[str]) -> str:
+    _uint(len(bindings), 255, "key-set count")
+    for reference in bindings:
+        _reference(reference)
+    plan.add(name, bytes((len(bindings),)) + bytes(3 * len(bindings)), owner="navigation")
+    for ordinal, reference in enumerate(bindings):
+        plan.relocate(name, 1 + 3 * ordinal, reference)
+    return name

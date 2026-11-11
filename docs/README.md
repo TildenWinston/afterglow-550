@@ -48,7 +48,7 @@ Reference documentation for supported remote architectures and configuration for
 
 - [README.md](harmony_ahcm/README.md) - Scope and read-only status
 - [image.md](harmony_ahcm/image.md) - Donor identity, twenty native slots, address domains and checksum
+- [reading.md](harmony_ahcm/reading.md) - Rooted IR, mode, action, state and monochrome text readers
 - [ir-runtime.md](harmony_ahcm/ir-runtime.md) - Bounded IR register, buffering and lifecycle references
 - [assembly.md](harmony_ahcm/assembly.md) - Explicit allocations, rooted references and offline framing scope
-- [reading.md](harmony_ahcm/reading.md) - Rooted IR, mode, action, state and monochrome text readers
 - [platform.md](harmony_ahcm/platform.md) - Counted inline platform-event action handoff and remaining startup limits

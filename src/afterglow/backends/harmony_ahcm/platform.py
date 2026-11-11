@@ -60,3 +60,33 @@ def encode_event_table(actions: Iterable[EventAction]) -> bytes:
         data.append(action.opcode)
         data[0] += 1
     return bytes(data)
+
+
+@dataclass(frozen=True)
+class KeyChange:
+    """Raw ingress effects, not named controls, event execution or a physical scan."""
+
+    active_key: int
+    events: tuple[int, ...]
+    clear_ir_held: bool
+    restart_repeat: bool
+
+
+def key_transition(previous: int, scanned: int, *, emit_release: bool) -> KeyChange:
+    """Model an established scan change with an explicit release-reporting policy.
+
+    Timer scheduling, IR priming and mapping a physical switch to a scan code belong
+    to their callers; this function never fabricates those inputs.
+    """
+    _unsigned(previous, 8, "previous scan code")
+    _unsigned(scanned, 8, "current scan code")
+    if type(emit_release) is not bool:
+        raise ValueError("release reporting must be an explicit boolean")
+    if previous == scanned:
+        return KeyChange(scanned, (), False, False)
+    events = []
+    if previous and emit_release:
+        events.append(previous | 0x40)
+    if scanned:
+        events.append(scanned | 0x80)
+    return KeyChange(scanned, tuple(events), bool(previous), bool(scanned))

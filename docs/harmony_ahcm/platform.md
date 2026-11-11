@@ -73,3 +73,53 @@ storage bounds, not a display-size or safe-image-size claim.
 Unknown glyph operations remain errors, and no existing glyph artwork, startup
 program, screen or household configuration is copied by this primitive. It neither
 assembles a complete font/screen platform nor changes the read-only gates.
+
+## Caller-owned fonts and inline text programs
+
+`screens.add_font` allocates named caller-authored glyphs and an explicit font
+record using the [declared font grammar](reading.md). It requires a consistent
+height, nonzero first code and an explicit repertoire; glyph widths can differ.
+`add_font_index` allocates ordered named references, including explicit nulls and
+forward targets. Neither helper assigns root 7: the layout owner must declare
+that root, all other subsystem roots and the header inputs separately.
+
+`encode_text_program` takes an explicit font ordinal and ordered `TextLine` values.
+It emits the measured font-selection and inline-text instructions and terminates
+each code string and program. Coordinates are explicit source fields, not validated
+physical LCD cells. The supported text subset uses nonzero single-byte glyph codes;
+embedded terminators and unestablished extended mapping are refused rather than
+truncated. Empty strings are explicit, not replacement glyphs.
+
+Conditional image-local host probes follow the actual root/font/index/cache/string/
+glyph path against synthetic inputs and RAM painting, with raw external-byte reads
+and transaction setup abstracted. They corroborate the generated font/index/program
+records without a captured configuration template. The selected display-page state
+and normal access addressing are supplied by the probe, not proof of peripheral or
+boot initialization. Unknown font ordinals/codes must not be used merely because
+the field can encode them.
+
+These are deterministic source-owned drawing records, not a complete startup,
+mode/page binding generator, Unicode font service or LCD driver. Caller input must
+establish matching font/code ownership and readiness. No native key codes, measured
+geometry, copied platform programs or mandatory subsystem defaults are supplied.
+
+## Raw scan-change handoff
+
+`platform.key_transition` takes explicit previous/current scan bytes and an explicit
+release-reporting flag. Zero is no active scan. An unchanged scan emits nothing;
+it is not automatically a repeat. On change, a nonzero previous scan emits its
+release event (`scan | 0x40`) only if release reporting is enabled, followed by a
+nonzero new scan's press event (`scan | 0x80`).
+
+Replacing or releasing a previously active scan requests clearing the IR-held latch,
+even when its release event is suppressed. A newly active scan requests restarting
+the repeat machinery, without choosing timer units or scheduling a callback.
+The active scan is an input to subsequent IR priming, not an instruction to set
+the IR-held latch immediately. Raw event bits are retained, not reduced to a
+guessed six-bit physical key namespace.
+
+Scoped private synthetic probes follow the native change/event/latch-clear path,
+abstracting physical scan, queue sink and repeat reset. This does not establish
+which physical button produces a scan byte, debounce timing, repeat scheduling,
+GPIO wiring or actual held/released optical behavior. No profile key map or
+write/build capability is inferred from this data-only contract.

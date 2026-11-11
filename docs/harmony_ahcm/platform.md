@@ -137,6 +137,15 @@ the constructed source glyphs without an imported configuration or carried artwo
 Explicit initial cache/context/mode state remains a test input, not a startup
 implementation.
 
+Bounded private post-validation startup probes request event selector 1 for the
+ordinary entry and 4 for the alternate entry. Finite synthetic bootstrap-input
+checks corroborate both outcomes with device-memory access abstracted. When the
+user configuration is valid and selected, either outcome keeps that bank.
+A source-owned image may explicitly supply the same intended action in both
+entry records; it need not discover the current bootstrap input merely to make
+those two handoffs agree. This is not a default installed by the encoder or
+proof that the configuration validator/cache/peripherals are ready.
+
 The mandatory platform milestone is not complete. In particular, reset-to-application
 correspondence, configuration validity/selection inputs, cache/peripheral readiness
 and physical legend-to-scan mapping must be established independently. A logical

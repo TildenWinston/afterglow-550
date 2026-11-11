@@ -39,6 +39,11 @@ Nothing is sent anywhere.
   - Harmony One
   - Harmony 800 - a prototype Logitech never sold
 
+**Harmony 550 is in development and has a read-only profile.** The current backend
+validates native framing, preserves carriers and partially imports portable devices
+and signals. Unresolved controls and activity behavior remain native evidence with
+warnings. Project generation and qualified generated-image writes are not available.
+
 ## Before you start
 
 Nothing needs installing: no Python, no Logitech software, no driver.
@@ -133,6 +138,11 @@ python3 -m venv .venv && .venv/bin/pip install -e '.[dev,gui]'
 From source it uses the libconcord installed on the system. To use Afterglow's own build
 instead (needed for direct access), point `AFTERGLOW_LIBCONCORD` at the library file, for
 example `AFTERGLOW_LIBCONCORD=~/concordance/libconcord/.libs/libconcord.so.6`.
+
+Use `--concord-check` with the source launcher to check library loading without
+connecting to a remote. On Windows, the loader initializes Python's matching SSL
+runtime before libconcord. An SSL-runtime initialization failure is a host-library
+error, not a remote identity or configuration error.
 
 ## Special Thanks
 

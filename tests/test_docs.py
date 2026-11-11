@@ -40,6 +40,7 @@ EXPECTED = (
     "harmony_ahcm/README.md",
     "harmony_ahcm/image.md",
     "harmony_ahcm/reading.md",
+    "harmony_ahcm/ir-runtime.md",
     "harmony_ahcm/assembly.md",
 )
 
